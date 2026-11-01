@@ -153,8 +153,10 @@ class StreamingTests(unittest.TestCase):
 
 
 class DictionaryTests(unittest.TestCase):
-    def test_human_readings_are_sent_with_canonical_school_names(self):
-        result = keywords_from_rules(effective_words([["しがらき", "信楽"]]))
+    def test_human_readings_are_sent_with_explicitly_registered_school_names(self):
+        result = keywords_from_rules(effective_words([["しがらき", "信楽"],
+            ["おうびりん", "桜美林"], ["おうびりんだいがく", "桜美林大学"],
+            ["わせだだいがく", "早稲田大学"]]))
         self.assertIn("信楽=シガラキ", result)
         self.assertIn("桜美林大学=", result)
         self.assertIn("オウビリンダイガク", result)

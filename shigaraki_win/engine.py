@@ -95,7 +95,7 @@ class CpuEngine:
         self._worker = None
         self._lock = threading.Lock()
         from .vocabulary import effective_words
-        self.rules = effective_words([["しがらき", "信楽"]])
+        self.rules = effective_words([])
 
     @property
     def ready(self):

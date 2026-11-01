@@ -57,7 +57,7 @@ class App:
         self.signals.utterance.connect(self.session_utterance, Qt.ConnectionType.QueuedConnection)
         self.signals.preparing_stage.connect(self.preparation_stage, Qt.ConnectionType.QueuedConnection)
         self.settings_path = data_dir() / "settings.json"
-        self.settings = self.read_json(self.settings_path, {"modifier": 0, "log": True, "words": [["しがらき", "信楽"]]})
+        self.settings = self.read_json(self.settings_path, {"modifier": 0, "log": True, "words": []})
         from .settings_migration import migrate_control_default
         if migrate_control_default(self.settings):
             try:

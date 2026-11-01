@@ -1,4 +1,4 @@
-"""Small built-in vocabulary; user mappings take precedence without migration."""
+"""Common AI vocabulary; saved user mappings take precedence without migration."""
 from __future__ import annotations
 import re
 import unicodedata
@@ -20,27 +20,25 @@ def _kana_spellings(reading):
                    if "ァ" <= c <= "ヺ" or c == "ー" else c for c in katakana)
     return tuple(dict.fromkeys((reading, hiragana, katakana, half)))
 
-# School names only: never replace words such as 明治 or 女子 on their own.
-SCHOOLS = (
-    ("おうびりん", "おうびりん", "桜美林"),
-    ("おうびりんがくえん", "おうびりん学園", "桜美林学園"),
-    ("おうびりんだいがく", "おうびりん大学", "桜美林大学"),
-    ("めいじだいがく", "めいじ大学", "明治大学"),
-    ("わせだだいがく", "わせだ大学", "早稲田大学"),
-    ("さがみじょしだい", "さがみ女子大", "相模女子大"),
-    ("さがみじょしだいがく", "さがみ女子大学", "相模女子大学"),
+# Complete product names only; never replace fragments such as AI or GPT.
+# The first reading is also used in the dictionary display.
+AI_WORDS = (
+    ("OpenAI", ("おーぷんえーあい", "おーぷんAI")),
+    ("ChatGPT", ("ちゃっとじーぴーてぃー", "ちゃっとGPT")),
+    ("Codex", ("こーでっくす",)),
+    ("Antigravity", ("あんちぐらびてぃ", "あんちぐらびてぃー")),
+    ("Claude", ("くろーど",)),
+    ("Gemini", ("じぇみに",)),
 )
 
 
 def effective_words(user_words):
     custom = {heard: written for heard, written in user_words if heard and written}
     mappings = {}
-    for reading, mixed, written in SCHOOLS:
-        for alias in (reading, mixed):
-            for spelling in (alias, alias.replace("おうびりん", "おーびりん")):
-                katakana = "".join(chr(ord(c) + 0x60) if "ぁ" <= c <= "ゖ" else c for c in spelling)
-                for heard in (spelling, katakana):
-                    mappings[heard] = custom.get(written, written)
+    for written, readings in AI_WORDS:
+        for reading in readings:
+            for heard in _kana_spellings(reading):
+                mappings[heard] = custom.get(written, written)
     for heard, written in custom.items():
         for alias in _kana_spellings(heard):
             mappings[alias] = written
@@ -139,7 +137,7 @@ def recognition_terms(rules, user_words=(), *, context=""):
 def display_words(user_words):
     mappings = dict(effective_words(user_words))
     rows = []
-    for reading, mixed, _ in SCHOOLS:
-        alias = mixed.replace("おうびりん", "オービリン") if reading.startswith("おうびりん") else reading
+    for _, readings in AI_WORDS:
+        alias = readings[0].translate(_TO_KATAKANA)
         rows.append((alias, mappings[alias]))
     return rows + [(heard, written) for heard, written in user_words if heard and written]

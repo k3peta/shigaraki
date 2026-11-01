@@ -81,12 +81,12 @@ class PackagingTests(unittest.TestCase):
                 install(root, root, lambda *_: None, threading.Event(), root / "log")
             self.assertEqual(launch.call_args.args[0], [str(root / "信楽.exe"), "--installed"])
 
-    def test_a4_builder_emits_new_launcher_and_version_resources(self):
+    def test_a5_builder_emits_new_launcher_and_version_resources(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder); payload = root / "payload"
             (payload / "shigaraki_win").mkdir(parents=True)
             (payload / "shigaraki_win/app.ico").write_bytes(b"fixture icon")
-            output = root / "Shigaraki-Windows-0.1.0a4-setup.exe"
+            output = root / "Shigaraki-Windows-0.1.0a5-setup.exe"
             build = root / "build"
             def run(command, **kwargs):
                 if command[0] == "x86_64-w64-mingw32-gcc":
@@ -94,14 +94,14 @@ class PackagingTests(unittest.TestCase):
                 if command[0] == "makensis":
                     output.write_bytes(b"installer")
             with patch.object(builder.shutil, "which", return_value="tool"), patch.object(builder.subprocess, "run", side_effect=run):
-                result = builder.build_installer(payload, output, build, "0.1.0a4")
+                result = builder.build_installer(payload, output, build, "0.1.0a5")
             self.assertEqual((payload / "信楽.exe").read_bytes(), b"launcher")
             self.assertFalse((payload / "信楽 Haasテスト.exe").exists())
             resource = (build / "launcher.rc").read_text()
             self.assertIn('VALUE "ProductName", "信楽\\0"', resource)
             self.assertIn('VALUE "OriginalFilename", "信楽.exe\\0"', resource)
-            self.assertIn("FILEVERSION 0,1,0,4", resource)
-            self.assertEqual(Path(result["file"]).name, "Shigaraki-Windows-0.1.0a4-setup.exe")
+            self.assertIn("FILEVERSION 0,1,0,5", resource)
+            self.assertEqual(Path(result["file"]).name, "Shigaraki-Windows-0.1.0a5-setup.exe")
 
     def test_upgrade_uses_same_registration_and_guards_old_launcher(self):
         script = (builder.SOURCES / "Shigaraki.nsi").read_text()

@@ -31,7 +31,7 @@ def keywords_from_rules(rules, phrases=()):
             aliases.append(kana)
     preferred = [p for p in phrases if p in grouped]
     order = list(dict.fromkeys([*preferred[::-1], *list(grouped)[::-1]]))
-    # A shorter built-in school prefix competes with its full registered name.
+    # A shorter registered prefix competes with its full registered name.
     order = [v for v in order if not any(v != other and v in other for other in order)]
     result, size = [], 0
     for written in order:

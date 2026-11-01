@@ -2,14 +2,67 @@ import ctypes as C
 import unittest
 from unittest.mock import MagicMock
 
-from shigaraki_win.vocabulary import effective_words, recognition_terms, correction_glossary, topic_terms
+from shigaraki_win.vocabulary import effective_words, recognition_terms, correction_glossary, topic_terms, display_words
 from shigaraki_win.session import format_text
 from shigaraki_win.proofreading import safe_revision
 
 
+# These names are user registrations in the fixture, never built-in vocabulary.
+SCHOOL_WORDS = [
+    ["おーびりん", "桜美林"],
+    ["おーびりん大学", "桜美林大学"],
+    ["おうびりん大学", "桜美林大学"],
+    ["おうびりんだいがく", "桜美林大学"],
+    ["おーびりん学園", "桜美林学園"],
+    ["めいじだいがく", "明治大学"],
+    ["わせだ大学", "早稲田大学"],
+    ["さがみじょしだい", "相模女子大"],
+    ["さがみじょしだいがく", "相模女子大学"],
+]
+
+
 class VocabularyTests(unittest.TestCase):
-    def test_full_registered_name_is_not_diluted_by_its_shorter_fragments(self):
+    def test_defaults_contain_only_common_ai_names_in_display_hints_and_replacement(self):
+        from pathlib import Path
+        from shigaraki_win.engine import CpuEngine
+        from shigaraki_win.haas_worker import keywords_from_rules
         rules = effective_words([])
+        expected = {"OpenAI", "ChatGPT", "Codex", "Antigravity", "Claude", "Gemini"}
+        self.assertEqual({written for _, written in display_words([])}, expected)
+        self.assertEqual(len(display_words([])), 6)
+        self.assertEqual(set(recognition_terms(rules)), expected)
+        self.assertEqual(CpuEngine(Path("unused-model.gguf")).rules, rules)
+        keywords = keywords_from_rules(rules)
+        self.assertEqual({line.split("=", 1)[0] for line in keywords.splitlines()}, expected)
+        for reading, written in display_words([]):
+            self.assertEqual(format_text(reading + "を使います。", rules), written + "を使います。")
+        source = "オービリン大学とめいじだいがく、ワセダ大学とサガミジョシダイガク。"
+        self.assertEqual(format_text(source, rules), source)
+        self.assertEqual(topic_terms("桜美林大学と明治大学の話題。", rules), ())
+        self.assertEqual(correction_glossary(rules, source, "桜美林大学の授業。"), [])
+        self.assertNotIn("信楽", keywords)
+
+    def test_default_ai_readings_and_mixed_spellings_are_corrected(self):
+        rules = effective_words([])
+        for raw, written in (("オープンAI", "OpenAI"), ("オープンエーアイ", "OpenAI"),
+                             ("チャットGPT", "ChatGPT"), ("チャットジーピーティー", "ChatGPT"),
+                             ("アンチグラビティ", "Antigravity"), ("アンチグラビティー", "Antigravity"),
+                             ("ｱﾝﾁｸﾞﾗﾋﾞﾃｨ", "Antigravity")):
+            with self.subTest(raw=raw):
+                self.assertEqual(format_text(raw + "を開きます。", rules), written + "を開きます。")
+        source = "AIとGPT、オープンな資料とチャットについて。"
+        self.assertEqual(format_text(source, rules), source)
+
+    def test_user_override_changes_default_ai_readings_without_changing_saved_words(self):
+        custom = [["Antigravity", "アンチグラビティ"], ["こーでっくす", "コーデックス"]]
+        rules = effective_words(custom)
+        self.assertEqual(format_text("あんちぐらびてぃとコーデックス", rules), "アンチグラビティとコーデックス")
+        self.assertNotIn("Antigravity", recognition_terms(rules))
+        self.assertIn(("アンチグラビティ", "アンチグラビティ"), display_words(custom))
+        self.assertEqual(custom, [["Antigravity", "アンチグラビティ"], ["こーでっくす", "コーデックス"]])
+
+    def test_full_registered_name_is_not_diluted_by_its_shorter_fragments(self):
+        rules = effective_words(SCHOOL_WORDS)
         glossary = correction_glossary(rules, "相子大学で講義です。", "相模女子大学の授業。")
         self.assertEqual([entry["written"] for entry in glossary], ["相模女子大学"])
         self.assertEqual(topic_terms("桜美林大学と相模女子大学です。", rules), ("相模女子大学", "桜美林大学"))
@@ -29,12 +82,12 @@ class VocabularyTests(unittest.TestCase):
         self.assertNotIn("桜美林大学", recognition_terms(overridden, context="オービリン大学の話題。"))
 
     def test_glossary_uses_readings_and_current_topic_without_guessing_new_terms(self):
-        rules = effective_words([])
+        rules = effective_words(SCHOOL_WORDS)
         source = "桜尾林大学で授業をします。"
         self.assertEqual(correction_glossary(rules, source), [])
         glossary = correction_glossary(rules, source, "桜美林大学の授業について。")
         entry = next(item for item in glossary if item["written"] == "桜美林大学")
-        self.assertIn("おうびりん大学", entry["readings"])
+        self.assertIn("オービリン大学", entry["readings"])
         self.assertNotIn("未登録大学", str(correction_glossary(rules, source, "未登録大学の話題。")))
         self.assertTrue(correction_glossary(rules, "オービリン大学です。"))
 
@@ -79,8 +132,8 @@ class VocabularyTests(unittest.TestCase):
         rules = effective_words([["しがらき", "信楽"], ["しがらきあぷり", "公式アプリ"], ["信楽", "別名"]])
         self.assertEqual(format_text("シガラキアプリとｼｶﾞﾗｷを使います。", rules), "公式アプリと信楽を使います。")
 
-    def test_required_names_and_longest_aliases_are_available_without_settings(self):
-        rules = effective_words([])
+    def test_saved_school_names_still_work_as_user_registrations(self):
+        rules = effective_words(SCHOOL_WORDS)
         for raw, expected in (
             ("オービリン", "桜美林"),
             ("オービリン大学です。", "桜美林大学です。"),
@@ -102,9 +155,9 @@ class VocabularyTests(unittest.TestCase):
             self.assertEqual(format_text(text, rules), text)
 
     def test_user_dictionary_takes_precedence_without_mutating_it(self):
-        custom = [["オービリン", "OBIRIN"], ["明治大学", "MEIJI"]]
+        custom = [["オービリン", "OBIRIN"], ["めいじだいがく", "MEIJI"], ["明治大学", "MEIJI"]]
         rules = effective_words(custom)
-        self.assertEqual(custom, [["オービリン", "OBIRIN"], ["明治大学", "MEIJI"]])
+        self.assertEqual(custom, [["オービリン", "OBIRIN"], ["めいじだいがく", "MEIJI"], ["明治大学", "MEIJI"]])
         self.assertEqual(format_text("オービリンとめいじだいがく", rules), "OBIRINとMEIJI")
         self.assertEqual(format_text("明治大学", rules), "MEIJI")
 
@@ -128,7 +181,7 @@ class VocabularyTests(unittest.TestCase):
                 self.assertNotIn("ｼｶﾞﾗｷ", terms)
 
     def test_asr_written_terms_keep_their_slots_before_reading_hints(self):
-        for other_count, expected_extras in ((55, 1), (56, 0), (70, 0)):
+        for other_count, expected_extras in ((56, 1), (57, 0), (70, 0)):
             with self.subTest(other_count=other_count):
                 custom = [["しがらき", "信楽"]] + [[f"読み{i}", f"用語{i}"] for i in range(other_count)]
                 rules = effective_words(custom)
@@ -159,7 +212,7 @@ class VocabularyTests(unittest.TestCase):
         self.assertEqual(len(terms), len(canonical) + 2)
 
     def test_a_missed_registered_name_can_be_introduced_but_existing_names_stay(self):
-        terms = recognition_terms(effective_words([]))
+        terms = recognition_terms(effective_words(SCHOOL_WORDS))
         source, corrected = "桜尾林大学で授業です。", "桜美林大学で授業です。"
         self.assertEqual(safe_revision(source, corrected, terms), corrected)
         for old, new in (("桜美林学園です。", "桜美林大学です。"),

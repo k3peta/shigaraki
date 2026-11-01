@@ -10,7 +10,7 @@ Windows向けのベータ版です。Haasを使うこの版を、今後の信楽
 
 ## ダウンロードと使い方
 
-[ベータ版のダウンロード](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a4)から、`Shigaraki-Windows-0.1.0a4-setup.exe`を取得してください。[図入り導入ガイド](docs/INSTALL.md)に、インストール・モデル準備・マイク・操作方法をまとめています。
+[ベータ版のダウンロード](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a5)から、`Shigaraki-Windows-0.1.0a5-setup.exe`を取得してください。[図入り導入ガイド](docs/INSTALL.md)に、インストール・モデル準備・マイク・操作方法をまとめています。
 
 現在の配布exeは未署名です。SmartScreenの警告では「詳細情報」→「実行」で進める場合がありますが、Smart App Controlが有効な環境では起動がブロックされることがあります。ダウンロード前に[Windowsの警告と暫定手順](docs/INSTALL.md#windows-security)をご確認ください。
 
@@ -20,6 +20,8 @@ Windows向けのベータ版です。Haasを使うこの版を、今後の信楽
 - 認識結果の回収：転記に失敗しても、大ウィンドウの「最後の入力をコピー」から文章を取り出せます。
 
 大ウィンドウが開いている間、小窓は表示しません。以前の方式の信楽もインストールできますが、起動して使うのは一方だけです。キーは設定で変更できます。
+
+初期辞書はOpenAI、ChatGPT、Codex、Antigravity、Claude、Geminiの6語です。「アンチグラビティ」をAntigravityにするなど、読みからの表記補正と認識候補に使います。大学名などの個人用語は各自で登録してください。ユーザー登録を優先し、更新前に保存した辞書は保持します。
 
 ## 使っている技術
 

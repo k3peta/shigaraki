@@ -510,11 +510,16 @@ class UiStateTests(unittest.TestCase):
 
     def test_builtin_vocabulary_is_visible_without_overwriting_user_settings(self):
         before = list(self.app.settings["words"])
-        self.assertIn("オービリン大学 → 桜美林大学", self.app.main.words.toPlainText())
-        self.assertIn("さがみじょしだい → 相模女子大", self.app.main.words.toPlainText())
+        self.assertEqual(before, [])
+        self.assertIn("アンチグラビティ → Antigravity", self.app.main.words.toPlainText())
+        self.assertIn("コーデックス → Codex", self.app.main.words.toPlainText())
+        self.assertNotIn("桜美林", self.app.main.words.toPlainText())
+        self.assertNotIn("しがらき → 信楽", self.app.main.words.toPlainText())
         self.assertEqual(self.app.settings["words"], before)
 
     def test_recording_passes_written_terms_to_both_and_readings_only_to_asr(self):
+        self.app.settings["words"] = [["しがらき", "信楽"],
+            ["おうびりんだいがく", "桜美林大学"], ["めいじだいがく", "明治大学"]]
         self.make_ready_engine()
         self.app.proof_engine = SimpleNamespace(ready=True)
         self.enable_optional_proofreading()
@@ -565,7 +570,7 @@ class UiStateTests(unittest.TestCase):
             self.app.start(False)
         self.assertEqual(len(session.call_args.kwargs["phrases"]), 64)
         self.assertIn("用語0", proof.call_args.kwargs["protected"])
-        self.assertIn("桜美林大学", proof.call_args.kwargs["protected"])
+        self.assertIn("Antigravity", proof.call_args.kwargs["protected"])
 
     def test_current_field_context_is_passed_without_saving_reference_text(self):
         topic = "秘密の参照文脈：早稲田大学での授業準備です。"
