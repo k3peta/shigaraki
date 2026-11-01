@@ -178,7 +178,9 @@ class SentenceProofreader:
                 if self._raw:
                     self._boundaries.add(len(self._raw))
                 for start, sentence in self._sentences():
-                    self._since[self._key(self._raw, start, sentence)] = 0
+                    # Zero is a real monotonic timestamp on freshly booted
+                    # machines; subtract the debounce to make final text due now.
+                    self._since[self._key(self._raw, start, sentence)] = time.monotonic() - self.debounce
                 self._condition.notify()
             return self._render()
 

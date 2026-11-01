@@ -157,16 +157,19 @@ class ProofreadingTests(unittest.TestCase):
     def test_final_caption_skips_debounce_and_can_complete_before_freezing(self):
         revised = threading.Event()
         engine = MagicMock(); engine.correct.return_value = "気象庁です。"
-        worker = SentenceProofreader(engine, revised.set, debounce=60)
-        try:
-            worker.update("気象長です。")
-            self.assertTrue(worker.has_pending())
-            worker.update("気象長です。", final=True)
-            self.assertTrue(revised.wait(1))
-            self.assertFalse(worker.has_pending())
-            self.assertEqual(worker.freeze(), ("気象長です。", "気象庁です。"))
-        finally:
-            worker.freeze()
+        # A fresh CI VM can have less uptime than the configured debounce.
+        with patch("shigaraki_win.proofreading.time.monotonic", return_value=0.5):
+            worker = SentenceProofreader(engine, revised.set, debounce=60)
+            try:
+                worker.update("気象長です。")
+                self.assertTrue(worker.has_pending())
+                worker.update("気象長です。", final=True)
+                self.assertTrue(revised.wait(1))
+                self.assertFalse(worker.has_pending())
+                self.assertEqual(worker.freeze(), ("気象長です。", "気象庁です。"))
+            finally:
+                worker.freeze()
+                worker._thread.join(1)
 
     def test_failure_is_attempted_once_and_retains_text(self):
         engine = MagicMock(); engine.correct.side_effect = TimeoutError()

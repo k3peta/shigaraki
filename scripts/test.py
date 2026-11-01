@@ -24,7 +24,9 @@ try:
     result = unittest.TextTestRunner().run(suite)
 finally:
     for window in app.topLevelWidgets():
-        window.close()
+        # Fixtures may deliberately hold incomplete app state. Destroy widgets
+        # without sending user-facing close/cancel signals after assertions.
+        window.blockSignals(True)
         window.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
     app.quit()
