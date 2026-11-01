@@ -1,6 +1,6 @@
 # 信楽 — Haasを使ったローカル日本語音声入力
 
-Windows向けのベータ版です。左Ctrlを押して話すと、録音中から途中字幕を表示し、キーを離すと入力先へ貼り付けます。GPUや推論APIの契約は不要です。
+Windows向けのベータ版です。Haasを使うこの版を、今後の信楽の本流とします。左Ctrlを押して話すと、録音中から途中字幕を表示し、キーを離すと入力先へ貼り付けます。GPUや推論APIの契約は不要です。
 
 音声認識には、[Third IntelligenceのHaas-ja-v1.0](https://huggingface.co/third-intelligence/Haas-ja-v1.0)を使用しています。[SakasegawaによるGGUF変換版](https://huggingface.co/sakasegawa/Haas-ja-v1.0-GGUF)を、[speech.cpp](https://github.com/nyosegawa/speech.cpp)のCPUエンジンで実行します。これらの成果に支えられて、信楽は録音・途中字幕・辞書・他アプリへの転記を一つの操作にまとめています。
 
@@ -10,16 +10,16 @@ Windows向けのベータ版です。左Ctrlを押して話すと、録音中か
 
 ## ダウンロードと使い方
 
-[ベータ版のダウンロード](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a3-haas)から、`Shigaraki-Haas-Preview-0.1.0a3-setup.exe`を取得してください。[図入り導入ガイド](docs/INSTALL.md)に、インストール・モデル準備・マイク・操作方法をまとめています。
+[ベータ版のダウンロード](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a4)から、`Shigaraki-Windows-0.1.0a4-setup.exe`を取得してください。[図入り導入ガイド](docs/INSTALL.md)に、インストール・モデル準備・マイク・操作方法をまとめています。
 
-現在の配布exeは未署名です。SmartScreenの警告では「詳細情報」→「実行」で進める場合がありますが、Smart App Controlでブロックされた場合は、この未署名版を起動できません。ダウンロード前に[Windowsの警告への対処](docs/INSTALL.md#windows-security)をご確認ください。
+現在の配布exeは未署名です。SmartScreenの警告では「詳細情報」→「実行」で進める場合がありますが、Smart App Controlが有効な環境では起動がブロックされることがあります。ダウンロード前に[Windowsの警告と暫定手順](docs/INSTALL.md#windows-security)をご確認ください。
 
 - 小窓で入力：入力欄を選び、左Ctrlを長押しして話します。離すと確定して貼り付けます。
 - 大ウィンドウ：録音していないときに、左Ctrlを短く2回押すと開閉できます。
 - 連続入力：大ウィンドウの録音ボタン、または左Ctrl長押しで開始し、もう一度操作すると停止して貼り付けます。
 - 認識結果の回収：転記に失敗しても、大ウィンドウの「最後の入力をコピー」から文章を取り出せます。
 
-大ウィンドウが開いている間、小窓は表示しません。通常版の信楽もインストールできますが、起動して使うのは一方だけです。キーは設定で変更できます。
+大ウィンドウが開いている間、小窓は表示しません。以前の方式の信楽もインストールできますが、起動して使うのは一方だけです。キーは設定で変更できます。
 
 ## 使っている技術
 

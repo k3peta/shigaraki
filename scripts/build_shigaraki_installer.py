@@ -16,6 +16,8 @@ import subprocess
 
 PROJECT = Path(__file__).resolve().parents[1]
 SOURCES = PROJECT / "installers" / "windows"
+APP_EXE = "信楽.exe"
+LEGACY_APP_EXE = "信楽 Haasテスト.exe"
 
 
 def nsis_string(value):
@@ -40,12 +42,15 @@ def payload_includes(payload, build):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
             continue
         relative = checked_relative(path.relative_to(payload).as_posix())
+        if relative == LEGACY_APP_EXE:
+            raise ValueError("old Haas launcher in payload; assemble a clean payload")
         groups[str(PureWindowsPath(relative).parent)].append(relative)
         files.append(relative)
     # The a1 CPU CLI is no longer shipped by a2. It was an owned application
     # file, so the current uninstaller must also remove that upgrade leftover.
     install = []
-    uninstall = ['!insertmacro DeleteOwned "$INSTDIR\\speech\\speech.exe"']
+    uninstall = ['!insertmacro DeleteOwned "$INSTDIR\\speech\\speech.exe"',
+                 f'!insertmacro DeleteOwned "$INSTDIR\\{LEGACY_APP_EXE}"']
     for directory, paths in groups.items():
         suffix = "" if directory == "." else "\\" + nsis_string(directory)
         install.append(f'SetOutPath "$INSTDIR{suffix}"')
@@ -94,14 +99,14 @@ def build_installer(payload, output, build, version):
     rc = (f'1 ICON "{icon.as_posix()}"\n1 24 "{(build / "app.manifest").as_posix()}"\n'
           f'1 VERSIONINFO\n FILEVERSION {",".join(map(str,numeric_version))}\n PRODUCTVERSION {",".join(map(str,numeric_version))}\n'
           ' FILEOS 0x40004\n FILETYPE 1\n BEGIN\n BLOCK "StringFileInfo"\n BEGIN\n'
-          ' BLOCK "041104b0"\n BEGIN\n VALUE "ProductName", "信楽 Haasテスト\\0"\n'
-          f' VALUE "FileVersion", "{version}\\0"\n VALUE "FileDescription", "信楽 Haasテスト\\0"\n'
-          ' VALUE "OriginalFilename", "信楽 Haasテスト.exe\\0"\n END\n END\n'
+          ' BLOCK "041104b0"\n BEGIN\n VALUE "ProductName", "信楽\\0"\n'
+          f' VALUE "FileVersion", "{version}\\0"\n VALUE "FileDescription", "信楽\\0"\n'
+          f' VALUE "OriginalFilename", "{APP_EXE}\\0"\n END\n END\n'
           ' BLOCK "VarFileInfo"\n BEGIN\n VALUE "Translation", 0x411, 1200\n END\n END\n')
     (build / "launcher.rc").write_text(rc, encoding="utf-8")
     subprocess.run(["x86_64-w64-mingw32-windres", "--codepage=65001", str(build / "launcher.rc"),
                     "-O", "coff", "-o", str(build / "launcher-res.o")], check=True)
-    launcher = payload / "信楽 Haasテスト.exe"
+    launcher = payload / APP_EXE
     subprocess.run(["x86_64-w64-mingw32-gcc", "-std=c11", "-Os", "-Wall", "-Wextra", "-Werror",
                     "-municode", "-mwindows", "-static", "-s", "-I", str(build),
                     str(SOURCES / "shigaraki-launcher.c"), str(build / "launcher-res.o"),

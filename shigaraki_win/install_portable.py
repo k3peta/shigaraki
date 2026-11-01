@@ -11,7 +11,7 @@ import threading
 import time
 import traceback
 
-PAYLOAD = ("runtime", "speech", "native", "proofreader", "punctuation", "punctuation_vendor", "shigaraki_win", "windows_voice_typer", "launch.py", "信楽 Haasテスト.exe", "信楽を起動.cmd", "はじめに.html", "LICENSE", "upstream.json", "third_party")
+PAYLOAD = ("runtime", "speech", "native", "proofreader", "punctuation", "punctuation_vendor", "shigaraki_win", "windows_voice_typer", "launch.py", "信楽.exe", "信楽を起動.cmd", "はじめに.html", "LICENSE", "upstream.json", "third_party")
 
 
 def verify_installed_models(destination, progress, cancel, timeout=120):
@@ -82,22 +82,70 @@ def copy_payload(source: Path, destination: Path, progress=lambda *_: None, canc
         progress(done, total, str(relative))
 
 
+def _shortcut_paths(shell):
+    menu = Path(shell.SpecialFolders("Programs"))
+    desktop = Path(shell.SpecialFolders("Desktop"))
+    return menu / "信楽" / "信楽.lnk", desktop / "信楽.lnk", (
+        menu / "信楽 Haasテスト.lnk", desktop / "信楽 Haasテスト.lnk")
+
+
+def _owned_shortcut(shell, path, destination):
+    if not path.is_file():
+        return False
+    target = str(shell.CreateShortCut(str(path)).TargetPath)
+    if not target:
+        return False
+    normalize = lambda value: os.path.normcase(os.path.abspath(os.path.expandvars(str(value))))
+    return normalize(target) in {
+        normalize(destination / name)
+        for name in ("信楽.exe", "信楽 Haasテスト.exe", "runtime/pythonw.exe")}
+
+
 def create_shortcut(destination):
     import comtypes
     import comtypes.client
     comtypes.CoInitialize()
     try:
         shell = comtypes.client.CreateObject("WScript.Shell", dynamic=True)
-        menu = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
-        menu.mkdir(parents=True, exist_ok=True)
-        shortcut = shell.CreateShortCut(str(menu / "信楽 Haasテスト.lnk"))
-        launcher = destination / "信楽 Haasテスト.exe"
-        shortcut.TargetPath = str(launcher if launcher.is_file() else destination / "runtime" / "pythonw.exe")
-        shortcut.Arguments = "" if launcher.is_file() else f'"{destination / "launch.py"}" run'
-        if launcher.is_file():
-            shortcut.IconLocation = str(launcher) + ",0"
-        shortcut.WorkingDirectory = str(destination)
-        shortcut.Save()
+        start, desktop, legacy = _shortcut_paths(shell)
+        if start.exists() and not _owned_shortcut(shell, start, destination):
+            raise FileExistsError("start menu shortcut belongs to another application")
+        start.parent.mkdir(parents=True, exist_ok=True)
+        launcher = destination / "信楽.exe"
+        def save(path):
+            shortcut = shell.CreateShortCut(str(path))
+            shortcut.TargetPath = str(launcher if launcher.is_file() else destination / "runtime" / "pythonw.exe")
+            shortcut.Arguments = "" if launcher.is_file() else f'"{destination / "launch.py"}" run'
+            shortcut.IconLocation = str(launcher if launcher.is_file() else destination / "shigaraki_win" / "app.ico") + ",0"
+            shortcut.WorkingDirectory = str(destination)
+            shortcut.Save()
+        save(start)
+        desktop_ok = not desktop.exists() or _owned_shortcut(shell, desktop, destination)
+        if desktop_ok:
+            desktop.parent.mkdir(parents=True, exist_ok=True)
+            save(desktop)
+        for path in legacy:
+            if _owned_shortcut(shell, path, destination):
+                path.unlink()
+        return desktop_ok
+    finally:
+        comtypes.CoUninitialize()
+
+
+def remove_shortcuts(destination):
+    import comtypes
+    import comtypes.client
+    comtypes.CoInitialize()
+    try:
+        shell = comtypes.client.CreateObject("WScript.Shell", dynamic=True)
+        start, desktop, legacy = _shortcut_paths(shell)
+        for path in (start, desktop, *legacy):
+            if _owned_shortcut(shell, path, destination):
+                path.unlink()
+        try:
+            start.parent.rmdir()  # Only this now-empty app group, never recursively.
+        except OSError:
+            pass
     finally:
         comtypes.CoUninitialize()
 
@@ -126,7 +174,7 @@ def install(source, destination, progress, cancel, log):
     if cancel.is_set():
         raise InterruptedError("installation cancelled")
     progress("launch", 0, 0, "")
-    launcher = destination / "信楽 Haasテスト.exe"
+    launcher = destination / "信楽.exe"
     command = ([str(launcher), "--installed"] if launcher.is_file() else
                [str(destination / "runtime" / "pythonw.exe"), str(destination / "launch.py"), "run", "--installed"])
     subprocess.Popen(command, cwd=destination)
@@ -135,7 +183,9 @@ def install(source, destination, progress, cancel, log):
 
 def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--shortcut":
-        create_shortcut(Path(sys.argv[2]))
+        return 0 if create_shortcut(Path(sys.argv[2])) else 2
+    if len(sys.argv) == 3 and sys.argv[1] == "--remove-shortcuts":
+        remove_shortcuts(Path(sys.argv[2]))
         return 0
     source = Path(__file__).resolve().parent
     sys.path.insert(0, str(source / "punctuation_vendor"))

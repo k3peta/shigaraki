@@ -4,11 +4,11 @@
 
 このベータ版のセットアップ用exeにはコード署名がありません。Windowsの設定によっては起動できません。開く前に、下の[Windowsの警告への対処](#windows-security)を確認してください。
 
-1. [Releases](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a3-haas)から`Shigaraki-Haas-Preview-0.1.0a3-setup.exe`をダウンロードします。
-2. 旧Haas版や通常版の信楽が動いている場合は、録音・処理を終えてトレイの終了メニューから閉じます。通常版のアンインストールは不要です。
+1. [Releases](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a4)から`Shigaraki-Windows-0.1.0a4-setup.exe`をダウンロードします。
+2. 起動中の信楽の録音・処理を終え、トレイの終了メニューから閉じます。Haasテスト版からはそのまま更新できます。辞書・設定・ログ・取得済みモデルは引き継ぎます。以前の方式の信楽をアンインストールする必要はありません。
 3. セットアップ用exeを開き、画面の指示に従います。アプリは現在のユーザーのフォルダへ入ります。
 4. 最後の「続けてHaasモデルを準備する」を選んだまま終了します。初回は約352MBのHaas Q4_Kモデルを取得し、検証と読み込みを行います。句読点用のモデルとトークナイザー、合計約44MBは同梱しています。
-5. 準備完了の表示を確認します。次回からは、デスクトップまたはスタートメニューの「信楽 Haasテスト」から起動できます。
+5. 準備完了の表示を確認します。次回からは、デスクトップまたはスタートメニューの「信楽」から起動できます。
 
 ![モデル準備画面のプレビュー](images/setup.png)
 
@@ -22,7 +22,7 @@
 
 ### 「WindowsによってPCが保護されました」（SmartScreen）
 
-1. ファイルが[信楽の公式Releases](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a3-haas)から取得した`Shigaraki-Haas-Preview-0.1.0a3-setup.exe`であることを確認します。
+1. ファイルが[信楽の公式Releases](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a4)から取得した`Shigaraki-Windows-0.1.0a4-setup.exe`であることを確認します。
 2. 警告画面の「詳細情報」を選びます。
 3. 配布元を信頼できる場合に限り、表示された「実行」を選びます。
 
@@ -32,7 +32,24 @@
 
 「安全に実行できることを発行元が確認できなかったため、ブロックしました」などと表示される場合は、Smart App Controlによるブロックです。「詳細情報→実行」で続けることはできません。
 
-現在の未署名版では、この環境でインストールを開始できません。Microsoftによると、Smart App Controlにはアプリ単位の例外許可がありません。保護設定は変更せず、[Issues](https://github.com/k3peta/shigaraki/issues/new/choose)へ警告文と版番号をお知らせください。個人情報や入力した文章の提出は不要です。配布側での有効なコード署名などの対応が必要です。[Microsoftの説明](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions)
+この警告が出た場合、Smart App Controlをオンにしたままでは現在の未署名セットアップを起動できません。Microsoftによると、アプリ単位の例外許可はありません。[Microsoftの説明](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions)
+
+### 暫定手順：インストール後すぐに保護を戻す
+
+2026年11月2日、利用者から、Windows 11 26H2でSmart App Controlを一時的にオフにしてa3をインストールし、再びオンにしても信楽が起動・動作したとの報告がありました。開発側での同条件の再現試験や、a4・すべてのPCでの確認はまだ行っていません。
+
+この操作中はSmart App Controlの保護が一時的に働かなくなります。Microsoftは最近のWindows更新で再有効化できるようになったと案内しています。Windows Updateを適用し、自分の環境で再有効化できることを確認した場合に限り、次の手順を使ってください。設定画面に「再インストールしないとオンに戻せない」などの注意がある場合や、再有効化の可否が分からない場合は実施しないでください。
+
+1. [公式Releases](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a4)から取得したセットアップ用exeを用意します。
+2. 「Windows セキュリティ」→「アプリとブラウザー コントロール」→「スマート アプリ コントロールの設定」を開きます。
+3. Smart App Controlを一時的に「オフ」にします。他の保護設定は変更しません。
+4. 信楽のセットアップ用exeを実行します。完了画面の「続けてHaasモデルを準備する」は外して終了します。
+5. すぐに同じ設定画面へ戻り、Smart App Controlを「オン」に戻します。
+6. オンになったことを確認してから信楽を起動し、モデル準備と短い音声入力を試します。
+
+オンへ戻せない、またはオンに戻すと起動・認識がブロックされる場合は、[Issues](https://github.com/k3peta/shigaraki/issues/new/choose)へ警告文と版番号をお知らせください。オフのまま使い続けることは案内していません。個人情報や入力した文章の提出は不要です。正式なコード署名を付けた配布は別途準備中です。
+
+以前の方式の「信楽」も入っている場合、アプリ一覧に同名が並ぶことがあります。この更新版は0.1.0a4です。デスクトップの既存ショートカットは上書きしません。作成を見送った案内が出た場合は、スタートメニューの「信楽」フォルダー内の「信楽」から起動してください。
 
 ## マイクと小窓
 
@@ -52,15 +69,15 @@ Windowsのマイクの使用許可を確認します。信楽の「設定」で�
 
 ![設定画面のプレビュー](images/settings.png)
 
-左Ctrlの代わりに左Altを選ぶこともできます。通常版とHaas版は同時に使わず、一方を終了して切り替えます。
+左Ctrlの代わりに左Altを選ぶこともできます。旧方式版とHaas版は同時に使わず、一方を終了して切り替えます。
 
-「単語辞書」に、聞き取られた表記と入力したい表記を登録できます。辞書は認識候補と登録済みの表記補正に使いますが、必ず正しく認識されるわけではありません。通常版の辞書は自動でコピーしません。
+「単語辞書」に、聞き取られた表記と入力したい表記を登録できます。辞書は認識候補と登録済みの表記補正に使いますが、必ず正しく認識されるわけではありません。旧方式版の辞書は自動でコピーしません。
 
 高速句読点補完は初期状態でオンです。Qwenによる生成校正は初期状態でオフで、オンにすると約563MBのモデルを追加取得します。
 
 ## 削除と困ったとき
 
-アプリをトレイから終了し、Windowsの「設定」→「アプリ」→「インストールされているアプリ」で「信楽 Haasテスト」を削除します。辞書・設定・最後の入力・ログ・モデルは`%LOCALAPPDATA%\ShigarakiHaasPreview`に残します。
+アプリをトレイから終了し、Windowsの「設定」→「アプリ」→「インストールされているアプリ」で、この版の「信楽」を削除します。辞書・設定・最後の入力・ログ・モデルは`%LOCALAPPDATA%\ShigarakiHaasPreview`に残します。
 
 不具合の報告先は[Issues](https://github.com/k3peta/shigaraki/issues/new/choose)です。字幕が出ないのか、字幕は出るが転記されないのかを分けて教えてください。実際の音声や文章を提出する必要はありません。
 

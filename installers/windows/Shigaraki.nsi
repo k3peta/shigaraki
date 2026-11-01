@@ -4,7 +4,7 @@ Unicode true
 !include "LogicLib.nsh"
 !include "installer-copy.nsh"
 !define APP_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\ShigarakiHaasPreview"
-Name "信楽 Haasテスト"
+Name "${NAME}"
 OutFile "${OUTPUT_EXE}"
 InstallDir "$LOCALAPPDATA\Programs\ShigarakiHaasPreview"
 RequestExecutionLevel user
@@ -13,7 +13,7 @@ SetCompressorDictSize 32
 ShowInstDetails show
 ShowUninstDetails show
 VIProductVersion "${PRODUCT_VERSION}"
-VIAddVersionKey /LANG=1041 "ProductName" "信楽 Haasテスト"
+VIAddVersionKey /LANG=1041 "ProductName" "${NAME}"
 VIAddVersionKey /LANG=1041 "FileDescription" "${SETUP_TITLE}"
 VIAddVersionKey /LANG=1041 "FileVersion" "${APP_VERSION}"
 VIAddVersionKey /LANG=1041 "LegalCopyright" "Shigaraki contributors"
@@ -34,6 +34,18 @@ VIAddVersionKey /LANG=1041 "LegalCopyright" "Shigaraki contributors"
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "Japanese"
 
+!macro RefuseLockedFile path
+    ${If} ${FileExists} "${path}"
+        System::Call 'kernel32::CreateFileW(w "${path}", i 0x80, i 0, p 0, i 3, i 0, p 0) p.r0'
+        ${If} $0 P= -1
+            MessageBox MB_OK|MB_ICONINFORMATION "${CLOSE_FIRST}"
+            Abort
+        ${Else}
+            System::Call 'kernel32::CloseHandle(p r0)'
+        ${EndIf}
+    ${EndIf}
+!macroend
+
 !macro RefuseWhileRunning
     System::Call 'kernel32::OpenMutexW(i 0x100000, i 0, w "Local\ShigarakiHaasPreview.Desktop.Running") p.r0'
     ${If} $0 P<> 0
@@ -43,15 +55,9 @@ VIAddVersionKey /LANG=1041 "LegalCopyright" "Shigaraki contributors"
     ${EndIf}
     ; Older cmd-based releases do not hold our mutex. A loaded Python DLL must
     ; not be overwritten or removed either; do not terminate another process.
-    ${If} ${FileExists} "$INSTDIR\runtime\python314.dll"
-        System::Call 'kernel32::CreateFileW(w "$INSTDIR\runtime\python314.dll", i 0x80, i 0, p 0, i 3, i 0, p 0) p.r0'
-        ${If} $0 P= -1
-            MessageBox MB_OK|MB_ICONINFORMATION "${CLOSE_FIRST}"
-            Abort
-        ${Else}
-            System::Call 'kernel32::CloseHandle(p r0)'
-        ${EndIf}
-    ${EndIf}
+    !insertmacro RefuseLockedFile "$INSTDIR\runtime\python314.dll"
+    !insertmacro RefuseLockedFile "$INSTDIR\信楽.exe"
+    !insertmacro RefuseLockedFile "$INSTDIR\信楽 Haasテスト.exe"
 !macroend
 
 Function .onInit
@@ -63,21 +69,44 @@ Function .onInit
 FunctionEnd
 
 Function PrepareModels
-    Exec '"$INSTDIR\信楽 Haasテスト.exe" --prepare'
+    Exec '"$INSTDIR\信楽.exe" --prepare'
 FunctionEnd
 
 Section "ShigarakiHaasPreview"
     SetOutPath "$INSTDIR"
     SetOverwrite on
+    AllowSkipFiles off
+    ClearErrors
     !include "payload-install.nsh"
+    ${If} ${Errors}
+        Abort
+    ${EndIf}
     WriteUninstaller "$INSTDIR\Uninstall.exe"
-    CreateShortcut "$SMPROGRAMS\信楽 Haasテスト.lnk" "$INSTDIR\信楽 Haasテスト.exe" "" "$INSTDIR\信楽 Haasテスト.exe" 0
-    CreateShortcut "$DESKTOP\信楽 Haasテスト.lnk" "$INSTDIR\信楽 Haasテスト.exe" "" "$INSTDIR\信楽 Haasテスト.exe" 0
-    WriteRegStr HKCU "${APP_KEY}" "DisplayName" "信楽 Haasテスト"
+    ; Remove only the earlier launcher in this same fixed Haas installation.
+    ; Keep it until the new payload has been copied successfully. Refuse instead
+    ; of scheduling removal or terminating a running process.
+    ${If} ${FileExists} "$INSTDIR\信楽 Haasテスト.exe"
+        ClearErrors
+        Delete "$INSTDIR\信楽 Haasテスト.exe"
+        ${If} ${Errors}
+            MessageBox MB_OK|MB_ICONINFORMATION "${CLOSE_FIRST}"
+            Abort
+        ${EndIf}
+    ${EndIf}
+    ; Shared Python/COM code checks shortcut ownership, preserving other apps.
+    nsExec::ExecToStack /TIMEOUT=15000 '"$INSTDIR\runtime\pythonw.exe" "$INSTDIR\install.py" --shortcut "$INSTDIR"'
+    Pop $0
+    Pop $1
+    ${If} $0 == "2"
+        MessageBox MB_OK|MB_ICONINFORMATION "${SHORTCUT_COLLISION}"
+    ${ElseIf} $0 != "0"
+        MessageBox MB_OK|MB_ICONEXCLAMATION "${SHORTCUT_FAILED}"
+    ${EndIf}
+    WriteRegStr HKCU "${APP_KEY}" "DisplayName" "${NAME}"
     WriteRegStr HKCU "${APP_KEY}" "DisplayVersion" "${APP_VERSION}"
     WriteRegStr HKCU "${APP_KEY}" "Publisher" "Shigaraki contributors"
     WriteRegStr HKCU "${APP_KEY}" "InstallLocation" "$INSTDIR"
-    WriteRegStr HKCU "${APP_KEY}" "DisplayIcon" "$INSTDIR\信楽 Haasテスト.exe,0"
+    WriteRegStr HKCU "${APP_KEY}" "DisplayIcon" "$INSTDIR\信楽.exe,0"
     WriteRegStr HKCU "${APP_KEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
     WriteRegDWORD HKCU "${APP_KEY}" "NoModify" 1
     WriteRegDWORD HKCU "${APP_KEY}" "NoRepair" 1
@@ -107,6 +136,14 @@ FunctionEnd
 
 Section "Uninstall"
     SetOutPath "$TEMP"
+    ; Resolve ownership while the embedded runtime is still present. If it is
+    ; broken or blocked, leave links alone and continue exact-path app removal.
+    nsExec::ExecToStack /TIMEOUT=15000 '"$INSTDIR\runtime\pythonw.exe" "$INSTDIR\install.py" --remove-shortcuts "$INSTDIR"'
+    Pop $0
+    Pop $1
+    ${If} $0 != "0"
+        MessageBox MB_OK|MB_ICONEXCLAMATION "${SHORTCUT_CLEANUP_FAILED}"
+    ${EndIf}
     StrCpy $R9 0
     ; Generated exact paths only. User data outside Programs is intentionally retained.
     !include "payload-uninstall.nsh"
@@ -117,7 +154,5 @@ Section "Uninstall"
     ${EndIf}
     Delete "$INSTDIR\Uninstall.exe"
     RMDir "$INSTDIR"
-    Delete "$SMPROGRAMS\信楽 Haasテスト.lnk"
-    Delete "$DESKTOP\信楽 Haasテスト.lnk"
     DeleteRegKey HKCU "${APP_KEY}"
 SectionEnd

@@ -70,8 +70,8 @@ Windows GNU環境ではRustテストも静的ライブラリが必要です。�
 ```sh
 python scripts/build_shigaraki_installer.py \
   /path/to/verified-windows-payload \
-  dist/Shigaraki-Haas-Preview-0.1.0a3-setup.exe \
-  --build build/installer --version 0.1.0a3
+  dist/Shigaraki-Windows-0.1.0a4-setup.exe \
+  --build build/installer --version 0.1.0a4
 ```
 
 これは検証済みのWindows配布フォルダをNSISでパッケージ化する工程です。Mac用のPythonやDLLをWindows配布物へコピーしても動作しません。Windows用の入力を準備する例は次のとおりです。

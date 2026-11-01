@@ -153,6 +153,7 @@ def main(argv=None):
     import hashlib
     qt = QApplication(["Shigaraki Haas Preview"])
     qt.setApplicationName("ShigarakiHaasPreview")
+    qt.setApplicationDisplayName("信楽")
     import ctypes
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ShigarakiHaasPreview.Desktop")
     from .ui import wave_icon
