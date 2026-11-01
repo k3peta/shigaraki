@@ -1,0 +1,9 @@
+* text=auto
+*.py text eol=lf
+*.rs text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.png binary
+*.ico binary
+third_party/** -text

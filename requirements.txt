@@ -1,0 +1,7 @@
+# Python 3.11+; models and native executables are fetched/built separately.
+PySide6-Essentials==6.12.0
+numpy==2.4.6
+sounddevice==0.5.6
+onnxruntime==1.31.1
+tokenizers==0.23.3
+comtypes==1.4.16; sys_platform == "win32"

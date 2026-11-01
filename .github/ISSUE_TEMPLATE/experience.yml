@@ -1,0 +1,28 @@
+name: 動作報告・速度の感想
+description: 快適に使えた環境や、遅さが気になる場面を教えてください。
+title: "[動作報告] "
+body:
+  - type: markdown
+    attributes:
+      value: "問題なく使えた報告も歓迎します。各項目は分かる範囲で構いません。"
+  - type: input
+    id: version
+    attributes:
+      label: 信楽の版
+      placeholder: "例：0.1.0a3"
+  - type: textarea
+    id: machine
+    attributes:
+      label: PC環境
+      description: "機種名またはCPU、メモリ、Windowsの版。CPU名が分からなければ機種名だけでも役立ちます。"
+  - type: input
+    id: target
+    attributes:
+      label: 使ったアプリ・サイト
+  - type: textarea
+    id: experience
+    attributes:
+      label: 使用感
+      description: "字幕が出始める速さ、話し続けて遅れが増えるか、停止後の待ち時間、CPU負荷や発熱など。体感だけでも構いません。文字は入ったが窓が閉じるのが遅い場合は、その違いも教えてください。"
+    validations:
+      required: true

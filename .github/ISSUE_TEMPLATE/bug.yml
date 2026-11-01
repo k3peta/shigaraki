@@ -1,0 +1,35 @@
+name: 不具合の報告
+description: 字幕・音声認識・転記・起動などの問題を報告します。
+title: "[不具合] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "分かる範囲で構いません。音声や実際の文章を提出する必要はありません。"
+  - type: input
+    id: version
+    attributes:
+      label: 信楽の版
+      placeholder: "例：0.1.0a3"
+  - type: input
+    id: target
+    attributes:
+      label: 入力先のアプリ・サイト
+      placeholder: "例：Chrome、テキストエディター"
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 起きたこと・期待した動き
+      description: "字幕が出ない、字幕は出るが貼り付かない、などを分けると助かります。再現手順やエラー文も分かれば教えてください。"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: PC環境
+      description: "機種名またはCPU、メモリ、Windowsの版。分かる項目だけで構いません。"
+  - type: textarea
+    id: example
+    attributes:
+      label: 誤変換の例・補足（任意）
+      description: "差し支えない範囲で、期待した表記と実際の結果を記載できます。"

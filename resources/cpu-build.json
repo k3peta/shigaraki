@@ -1,0 +1,49 @@
+{
+  "sources": {
+    "speech": {
+      "commit": "06590811a90041f935a470ba0e2b85346d2fc041",
+      "url": "https://codeload.github.com/nyosegawa/speech.cpp/tar.gz/06590811a90041f935a470ba0e2b85346d2fc041",
+      "sha256": "6fbbb815cc0ec62f0c9f15212cf2a5425d9643ba413717fd116bb3627ef6f625",
+      "root": "speech.cpp-06590811a90041f935a470ba0e2b85346d2fc041"
+    },
+    "ggml": {
+      "commit": "700c9d743ed7cc583c0f1b6507afebb6c0e88bc0",
+      "url": "https://codeload.github.com/nyosegawa/ggml/tar.gz/700c9d743ed7cc583c0f1b6507afebb6c0e88bc0",
+      "sha256": "74be9deef0460be7f937b31b5ca1265ebee2782b34d7213c839213bb2f0f5815",
+      "root": "ggml-700c9d743ed7cc583c0f1b6507afebb6c0e88bc0"
+    }
+  },
+  "rust": "rustc 1.93.0 (254b59607 2026-01-19)",
+  "cargo": "cargo 1.93.0 (083ac5135 2025-12-15)",
+  "target": "x86_64-pc-windows-gnu",
+  "mingw": "16.1.0",
+  "helper_bytes": 6140416,
+  "helper_sha256": "479df1bda0f5bdf80bb71f67a57463969df2f5a81f6c44defd40bee4a6ae59f5",
+  "system_dll_imports": [
+    "ADVAPI32.dll",
+    "KERNEL32.dll",
+    "api-ms-win-crt-convert-l1-1-0.dll",
+    "api-ms-win-crt-environment-l1-1-0.dll",
+    "api-ms-win-crt-filesystem-l1-1-0.dll",
+    "api-ms-win-crt-heap-l1-1-0.dll",
+    "api-ms-win-crt-locale-l1-1-0.dll",
+    "api-ms-win-crt-math-l1-1-0.dll",
+    "api-ms-win-crt-private-l1-1-0.dll",
+    "api-ms-win-crt-runtime-l1-1-0.dll",
+    "api-ms-win-crt-stdio-l1-1-0.dll",
+    "api-ms-win-crt-string-l1-1-0.dll",
+    "api-ms-win-crt-time-l1-1-0.dll",
+    "api-ms-win-crt-utility-l1-1-0.dll",
+    "ntdll.dll",
+    "api-ms-win-core-synch-l1-2-0.dll"
+  ],
+  "worker_pin_updated": false,
+  "model_weights_used": false,
+  "windows_execution_tested": false,
+  "upstream_metadata_symlinks_omitted": [
+    "speech.cpp-06590811a90041f935a470ba0e2b85346d2fc041/.agents/skills",
+    "speech.cpp-06590811a90041f935a470ba0e2b85346d2fc041/.claude/skills",
+    "ggml-700c9d743ed7cc583c0f1b6507afebb6c0e88bc0/.pi/SYSTEM.md"
+  ],
+  "application_version": "0.1.0a3"
+}

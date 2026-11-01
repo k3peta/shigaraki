@@ -1,0 +1,12 @@
+name: 改善要望
+description: 使いやすくするための提案や、困っている場面を教えてください。
+title: "[改善要望] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: request
+    attributes:
+      label: どの場面をどう改善したいですか
+      description: "困っていること、望む動作、使いたい場面を教えてください。実装方法が決まっていなくても構いません。"
+    validations:
+      required: true

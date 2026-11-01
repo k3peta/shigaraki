@@ -1,0 +1,22 @@
+[package]
+name = "shigaraki-haas-flow"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[features]
+compat-timing = []
+
+[dependencies]
+base64 = "=0.22.1"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.154"
+
+[target.'cfg(not(windows))'.dependencies]
+libloading = "=0.8.9"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

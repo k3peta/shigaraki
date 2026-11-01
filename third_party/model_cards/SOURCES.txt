@@ -1,0 +1,14 @@
+Original model cards, maintained by the upstream authors:
+
+Haas-ja-v1.0: Third Intelligence; Apache-2.0
+https://huggingface.co/third-intelligence/Haas-ja-v1.0
+
+Haas GGUF: Sakasegawa; Apache-2.0
+https://huggingface.co/sakasegawa/Haas-ja-v1.0-GGUF/blob/6b965d5007ba780585de51549d57a8c1c0d67c7e/README.md
+
+Punctuation: oboroge0; the pinned model card states weights are MIT.
+https://huggingface.co/oboroge0/hayamimi-punct-ja-4class/blob/226c5d4a461ed368264881fc3e6637cbeb68055e/README.md
+Base: SB Intuitions modernbert-ja-30m (MIT).
+Training-data attribution: FineWeb-2 jpn_Jpan, Hugging Face and dataset contributors (ODC-By 1.0).
+https://huggingface.co/datasets/HuggingFaceFW/fineweb-2
+https://opendatacommons.org/licenses/by/1-0/
