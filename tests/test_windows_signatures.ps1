@@ -71,3 +71,6 @@ finally {
     # Only remove fixtures created in this new, task-owned temporary directory.
     Remove-Item -LiteralPath $temp -Recurse -Force
 }
+# The last negative fixture intentionally returns 1. All assertions above must
+# finish before the test runner reports success to GitHub's PowerShell wrapper.
+exit 0
