@@ -2,9 +2,11 @@
 
 ## インストール
 
+このベータ版のセットアップ用exeにはコード署名がありません。Windowsの設定によっては起動できません。開く前に、下の[Windowsの警告への対処](#windows-security)を確認してください。
+
 1. [Releases](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a3-haas)から`Shigaraki-Haas-Preview-0.1.0a3-setup.exe`をダウンロードします。
 2. 旧Haas版や通常版の信楽が動いている場合は、録音・処理を終えてトレイの終了メニューから閉じます。通常版のアンインストールは不要です。
-3. セットアップ用exeを開き、画面に従います。アプリは現在のユーザーのフォルダへ入ります。
+3. セットアップ用exeを開き、画面の指示に従います。アプリは現在のユーザーのフォルダへ入ります。
 4. 最後の「続けてHaasモデルを準備する」を選んだまま終了します。初回は約352MBのHaas Q4_Kモデルを取得し、検証と読み込みを行います。句読点用のモデルとトークナイザー、合計約44MBは同梱しています。
 5. 準備完了の表示を確認します。次回からは、デスクトップまたはスタートメニューの「信楽 Haasテスト」から起動できます。
 
@@ -12,7 +14,25 @@
 
 ダウンロード済みで正常なモデルは再利用します。準備に失敗したときは接続・空き容量・表示内容を確認し、「再試行」を使います。モデルの準備が完了するまでは録音を始められません。
 
-公開exeにはコード署名がありません。Windowsの保護で起動できない環境は、現在の制約として扱っています。保護機能を無効にする手順は案内しません。
+<a id="windows-security"></a>
+
+## Windowsの警告への対処
+
+警告の名前を確認してください。SmartScreenとSmart App Controlでは、できる操作が異なります。
+
+### 「WindowsによってPCが保護されました」（SmartScreen）
+
+1. ファイルが[信楽の公式Releases](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a3-haas)から取得した`Shigaraki-Haas-Preview-0.1.0a3-setup.exe`であることを確認します。
+2. 警告画面の「詳細情報」を選びます。
+3. 配布元を信頼できる場合に限り、表示された「実行」を選びます。
+
+「実行」が表示されない場合は、この手順では進めません。警告文を確認し、下の案内も参照してください。[Microsoftの説明](https://github.com/MicrosoftDocs/windows-dev-docs/blob/docs/hub/apps/package-and-deploy/publish-first-app.md#step-6-handle-smartscreen-for-new-apps)
+
+### 「スマート アプリ コントロールが安全でない可能性のあるアプリをブロックしました」
+
+「安全に実行できることを発行元が確認できなかったため、ブロックしました」などと表示される場合は、Smart App Controlによるブロックです。「詳細情報→実行」で続けることはできません。
+
+現在の未署名版では、この環境でインストールを開始できません。Microsoftによると、Smart App Controlにはアプリ単位の例外許可がありません。保護設定は変更せず、[Issues](https://github.com/k3peta/shigaraki/issues/new/choose)へ警告文と版番号をお知らせください。個人情報や入力した文章の提出は不要です。配布側での有効なコード署名などの対応が必要です。[Microsoftの説明](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions)
 
 ## マイクと小窓
 

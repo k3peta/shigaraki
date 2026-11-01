@@ -12,6 +12,8 @@ Windows向けのベータ版です。左Ctrlを押して話すと、録音中か
 
 [ベータ版のダウンロード](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a3-haas)から、`Shigaraki-Haas-Preview-0.1.0a3-setup.exe`を取得してください。[図入り導入ガイド](docs/INSTALL.md)に、インストール・モデル準備・マイク・操作方法をまとめています。
 
+現在の配布exeは未署名です。SmartScreenの警告では「詳細情報」→「実行」で進める場合がありますが、Smart App Controlでブロックされた場合は、この未署名版を起動できません。ダウンロード前に[Windowsの警告への対処](docs/INSTALL.md#windows-security)をご確認ください。
+
 - 小窓で入力：入力欄を選び、左Ctrlを長押しして話します。離すと確定して貼り付けます。
 - 大ウィンドウ：録音していないときに、左Ctrlを短く2回押すと開閉できます。
 - 連続入力：大ウィンドウの録音ボタン、または左Ctrl長押しで開始し、もう一度操作すると停止して貼り付けます。
