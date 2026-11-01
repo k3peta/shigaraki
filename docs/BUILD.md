@@ -100,3 +100,15 @@ python scripts/build_windows_payload.py build/payload \
 `--proofreader`は任意です。指定しない配布物では生成校正を使えません。必要な上流ライセンス、対応ソースの案内、アプリとRustのソース、文書を含めて組み立てます。既存の出力、ハッシュの異なる素材、依存版の不一致、設定やログの混入は拒否します。
 
 この`build/payload`を、先ほどのNSISコマンドの入力に指定します。最終配布物の版とハッシュは`upstream.json`と`SHA256SUMS.txt`に残ります。Python依存の解決結果は、ビルド時の配布物内の記録も確認してください。コンパイラや依存パッケージを更新した場合は、Windows実機で改めて動作を確認します。
+
+## Windows署名の検証
+
+現在の公開exeは未署名です。以下は署名を付ける機能ではなく、将来の署名済み配布物をWindowsで検証するための手順です。
+
+PowerShell 7で、信頼済みの署名証明書に記載されたSubjectを指定します。Windowsによる署名の検証、指定した発行者との完全一致、タイムスタンプの存在を確認し、一つでも条件を満たさないファイルがあれば終了コード1を返します。OSの信頼設定は変更しません。
+
+```powershell
+pwsh -NoProfile -File scripts/verify_windows_signatures.ps1 -FilePath .\signed-setup.exe -ExpectedSubject '証明書に記載されたSubject' -ReportPath .\signature-report.json
+```
+
+この確認だけでSmart App Controlが有効なPCでの起動を保証するものではありません。インストーラに加え、アプリ本体・認識用ヘルパー・アンインストーラ、実行時に使う第三者ライブラリも確認し、対象PCで導入と音声入力を試します。
