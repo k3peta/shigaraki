@@ -34,6 +34,10 @@ SOURCES = {
              "sha256": "74be9deef0460be7f937b31b5ca1265ebee2782b34d7213c839213bb2f0f5815",
              "root": "ggml-700c9d743ed7cc583c0f1b6507afebb6c0e88bc0"},
 }
+NATIVE_PATCHES = ({
+    "file": "third_party/speech-cpu-abort.patch",
+    "sha256": "18d159426605695eb665a5a44323ac981860768aa38603108da4dcc3c509998a",
+},)
 OFF = ("VULKAN", "METAL", "ACCELERATE", "CUDA", "HIP", "SYCL", "OPENCL", "WEBGPU",
        "OPENMP", "BLAS", "NATIVE", "BACKEND_DL", "CPU_ALL_VARIANTS", "CCACHE",
        "AVX512", "AVX512_VBMI", "AVX512_VNNI", "AVX512_BF16", "AVX_VNNI",
@@ -142,7 +146,7 @@ def build(args):
         raise FileExistsError("use a new --work directory for a clean build")
     if output.exists():
         raise FileExistsError("output already exists; choose a new --output path")
-    programs = {name: tool(name) for name in ("cmake", "make", "x86_64-w64-mingw32-gcc",
+    programs = {name: tool(name) for name in ("cmake", "make", "patch", "x86_64-w64-mingw32-gcc",
         "x86_64-w64-mingw32-g++", "x86_64-w64-mingw32-windres", "x86_64-w64-mingw32-objdump")}
     rustc, cargo = tool(args.rustc), tool(args.cargo)
     rust_version = subprocess.check_output([rustc, "--version"], text=True).strip()
@@ -175,6 +179,12 @@ def build(args):
         if destination.exists() and not any(destination.iterdir()):
             destination.rmdir()  # An empty ggml submodule directory in the tar.
         skipped.extend(extract_sources(archive, destination, pin["root"]))
+    for index, pin in enumerate(NATIVE_PATCHES):
+        patch = PROJECT / pin["file"]
+        if patch.is_symlink() or sha256(patch) != pin["sha256"]:
+            raise ValueError("native patch checksum mismatch")
+        run(f"native-patch-{index}", [programs["patch"], "--batch", "--forward", "--fuzz=0",
+            "-p1", "--directory", str(source), "-i", str(patch)])
     native = work / "native"
     toolchain = work / "mingw.cmake"
     toolchain.write_text('set(CMAKE_SYSTEM_NAME Windows)\nset(CMAKE_SYSTEM_PROCESSOR AMD64)\n' +
@@ -212,12 +222,15 @@ def build(args):
     digest = sha256(output)
     if args.update_worker_pin:
         update_worker_pin(PROJECT / "shigaraki_win/engine.py", output.stat().st_size, digest)
-    report = {"sources": SOURCES, "rust": rust_version, "cargo": cargo_version, "target": TARGET,
+    report = {"sources": SOURCES, "patches": list(NATIVE_PATCHES),
+        "rust": rust_version, "cargo": cargo_version, "target": TARGET,
         "mingw": subprocess.check_output([programs["x86_64-w64-mingw32-g++"], "-dumpfullversion"], text=True).strip(),
         "helper_bytes": output.stat().st_size, "helper_sha256": digest, "system_dll_imports": dlls,
         "worker_pin_updated": args.update_worker_pin, "model_weights_used": False,
         "windows_execution_tested": False, "upstream_metadata_symlinks_omitted": skipped}
     (work / "build-result.json").write_text(json.dumps(report, indent=2) + "\n")
+    if args.update_worker_pin:
+        (PROJECT / "resources/cpu-build.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"bytes": report["helper_bytes"], "sha256": digest, "worker_pin_updated": args.update_worker_pin,
                       "windows_execution_tested": False}), flush=True)
 

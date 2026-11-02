@@ -67,6 +67,7 @@ class PayloadTests(unittest.TestCase):
         self.assertFalse((self.output / "runtime/site-packages/__pycache__").exists())
         self.assertFalse((self.output / "runtime/site-packages/direct_url.json").exists())
         for name in ("CREDITS.md", "THIRD_PARTY_NOTICES.md", "docs/INSTALL.md",
+                     "shigaraki_win/history.py", "shigaraki_win/history_ui.py", "shigaraki_win/history-copy.json",
                      "rust/haas-flow/src/main.rs", "third_party/rust/dependencies.json",
                      "punctuation/MODEL_LICENSE.txt", "punctuation/BASE_MODEL_LICENSE.txt"):
             self.assertTrue((self.output / name).is_file(), name)

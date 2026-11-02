@@ -1,10 +1,10 @@
 # Haas認識制御
 
-Windows用Haasテスト版の音声区間分けと途中字幕を管理するRust製の補助プログラムです。画面、マイク取得、貼り付けは従来のPython・Qt側に残しています。認識モデルはHaas Q4_Kのままで、モデルの計算はspeech.cppのCPUエンジンが担当します。
+Windows版信楽の音声区間分けと途中字幕を管理するRust製の補助プログラムです。画面、マイク取得、貼り付けは従来のPython・Qt側に残しています。認識モデルはHaas Q4_Kのままで、モデルの計算はspeech.cppのCPUエンジンが担当します。
 
-`app.py` → `rust_session.py` → `rust_worker.py` → このプログラム → speech.cppのC APIの順に動きます。Python側から送るのは新しく録音した音声だけです。Rust側で最新音声をまとめ、古い途中認識の依頼が並ばないようにします。発話の区切りで字幕を確定しても録音は続き、`stop`の後に最後の認識を完了します。
+`app.py` → `rust_session.py` → `rust_worker.py` → このプログラム → speech.cppのC APIの順に動きます。Python側から送るのは新しく録音した音声だけです。Rust側で最新音声をまとめ、古い途中認識の依頼が並ばないようにします。発話の区切りで字幕を確定しても録音は続き、`stop`の後に最後の認識を完了します。停止時には進行中の途中認識だけを中断し、確定区間を保持して未確定の末尾を最終認識します。中断以外のnativeエラーは隠しません。
 
-Windowsではspeech.cpp 0.10.0のCPU用静的ライブラリをリンクします。Rust 1.93.0、MinGW-w64 GCC 16.1.0、AVX2・F16C・FMAを有効にしたCPUビルドで確認しています。GPU、OpenMP、追加の推論用DLLは使いません。Windows MSVC向けのビルドは対象にしていません。
+Windowsではspeech.cpp 0.10.0のCPU用静的ライブラリをリンクします。Rust 1.93.0、MinGW-w64 GCC 16.1.0、AVX2・F16C・FMAを有効にしたCPUビルドで確認しています。GPU、OpenMP、追加の推論用DLLは使いません。Windows MSVC向けのビルドは対象にしていません。CPU取消の小さな差分は`third_party/speech-cpu-abort.patch`に収録し、`scripts/build_cpu_engine.py`が固定ソースへ適用します。
 
 ```sh
 SPEECH_STATIC_DIR=/path/to/speech-cpu-build \
@@ -18,4 +18,4 @@ cargo build --locked --release --target x86_64-pc-windows-gnu
 
 Rustのテストは`cargo test`で実行します。Python側の対象テストは`test_shigaraki*.py`と`test_haas*.py`です。旧声吉用のテストも同じフォルダに残っているため、Haas版の検証では対象を指定します。旧`haas_session.py`は比較用です。現在のアプリは`rust_session.py`を使用します。
 
-MacのCPU検証は`--library`で同じ版のC APIライブラリを指定して実行できます。`compat-timing`機能は旧版の字幕開始条件との比較用です。Macの合成音声試験では、初表示を早める効果は認められましたが、停止後の待ち時間は改善していません。Rust化だけで推論が高速になるわけではなく、Windows実機での速度・精度・操作の確認は別途必要です。
+MacのCPU検証は`--library`で同じ版のC APIライブラリを指定して実行できます。`compat-timing`機能は旧版の字幕開始条件との比較用です。Macの合成音声試験では、初表示を早める効果は認められましたが、Rust化だけで推論が高速になるわけではありません。a6の停止優先処理では、Macの約10秒素材で待ち時間が短縮しましたが、別の約15秒素材では改善していません。Windows実機での速度・精度・操作の確認は別途必要です。

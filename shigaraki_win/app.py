@@ -47,6 +47,7 @@ class App:
         self.from_installer = from_installer
         self.native = WindowsInput()
         self.main = MainWindow()
+        self.main.history.set_path(data_dir() / "recognition.jsonl")
         self.panel = CaptionPanel()
         self.setup = SetupWindow()
         self.signals = Signals()
