@@ -12,6 +12,8 @@ swift build -c release --jobs "${KOEFLOW_BUILD_JOBS:-2}" --package-path "$PROJEC
 SWIFT_ROOT="${KOEFLOW_SWIFT_BUILD_ROOT:-$ARTIFACT_ROOT/swift-build}"
 mkdir -p "$APP_PATH/Contents/"{MacOS,Frameworks,Resources/MacFiles,Resources/Licenses}
 cp "$SWIFT_ROOT/release/KoeFlow" "$APP_PATH/Contents/MacOS/KoeFlow"
+# Remove debug symbol paths from the copied release binary before signing it.
+xcrun strip -S "$APP_PATH/Contents/MacOS/KoeFlow"
 cp "$NATIVE_ROOT/files/shigaraki-haas-flow" "$APP_PATH/Contents/MacOS/shigaraki-haas-flow"
 cp "$NATIVE_ROOT/files/libspeech.4.dylib" "$APP_PATH/Contents/Frameworks/libspeech.4.dylib"
 cp "$NATIVE_ROOT/native-manifest.json" "$APP_PATH/Contents/Resources/MacFiles/native-manifest.json"

@@ -263,6 +263,15 @@ import KoeFlowCore
     /// Runs real monitor/timer logic with in-process events; never posts keyboard input.
     static func releaseSelfTest() async -> [String: Any] {
         var rows: [[String: Any]] = []
+        // Await the observed timer result; hosted runners may resume a sleep late.
+        func waitUntil(_ condition: () -> Bool) async -> Bool {
+            let deadline = ContinuousClock.now + .seconds(3)
+            while !condition() {
+                guard ContinuousClock.now < deadline else { return false }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            return true
+        }
         func event(_ code: UInt16, _ flags: UInt, type: NSEvent.EventType = .flagsChanged, time: Double = 0) -> NSEvent {
             NSEvent.keyEvent(with: type, location: .zero, modifierFlags: .init(rawValue: flags), timestamp: time,
                 windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code)!
@@ -281,27 +290,27 @@ import KoeFlowCore
             hold.onPress = { _ in starts += 1; mode = .recording }; hold.onRelease = { _ in stops += 1 }
             hold.onInteraction = { _ in interactions += 1 }
             hold.handle(event(code, flag), external: true)
-            try? await Task.sleep(for: .milliseconds(270))
+            let started = await waitUntil { starts == 1 }
             // A cleared event flag while the physical key remains down cannot commit.
             hold.handle(event(code, 0), external: true)
-            try? await Task.sleep(for: .milliseconds(100))
+            let falseReleaseChecked = await waitUntil { hold.releaseCheck == nil }
             hold.handle(event(0, flag, type: .keyDown), external: true)
             hold.handle(event(60, flag), external: true)
-            let protected = starts == 1 && stops == 0 && interactions == 1
+            let protected = started && falseReleaseChecked && starts == 1 && stops == 0 && interactions == 1
             physicallyDown = false
             hold.handle(event(code, 0), external: true)
-            try? await Task.sleep(for: .milliseconds(100))
+            let released = await waitUntil { stops == 1 }
             hold.handle(event(code, 0), external: true)
             rows.append(["key": key, "falseReleaseAndTypingProtected": protected,
-                "starts": starts, "stops": stops, "passed": protected && stops == 1 && mainActions == 0])
+                "starts": starts, "stops": stops, "passed": protected && released && stops == 1 && mainActions == 0])
         }
         let hold = ModifierHold()
         var starts = 0, stops = 0
         hold.selectedKey = { "leftControl" }; hold.keyDown = { _ in false }
         hold.onPress = { _ in starts += 1 }; hold.onRelease = { _ in stops += 1 }
         hold.handle(event(59, NSEvent.ModifierFlags.control.rawValue | 1), external: true)
-        try? await Task.sleep(for: .milliseconds(270))
-        rows.append(["key": "quickReleaseBeforeStart", "passed": starts == 0 && stops == 0])
+        let pendingFinished = await waitUntil { hold.pending == nil }
+        rows.append(["key": "quickReleaseBeforeStart", "passed": pendingFinished && starts == 0 && stops == 0])
         let mainHold = ModifierHold()
         var mainDown = false, busy = false, mainStarts = 0, mainStops = 0, commits = 0, toggles = 0
         var mainMode: WindowInputMode = .idle
