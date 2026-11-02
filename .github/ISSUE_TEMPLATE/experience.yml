@@ -9,12 +9,12 @@ body:
     id: version
     attributes:
       label: 信楽の版
-      placeholder: "例：0.1.0a3"
+      placeholder: "例：Windows版 0.1.0a7、Mac版 0.5.0"
   - type: textarea
     id: machine
     attributes:
       label: PC環境
-      description: "機種名またはCPU、メモリ、Windowsの版。CPU名が分からなければ機種名だけでも役立ちます。"
+      description: "機種名またはCPU、メモリ、OS名とバージョン。CPU名が分からなければ機種名だけでも役立ちます。"
   - type: input
     id: target
     attributes:
