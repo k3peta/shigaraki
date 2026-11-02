@@ -27,5 +27,6 @@
   "outcome_sendFailed": "貼り付け操作に失敗",
   "outcome_recognitionFailed": "認識を完了できず",
   "outcome_cancelled": "録音を中止",
-  "outcome_recognizing": "認識途中"
+  "outcome_recognizing": "認識途中",
+  "outcome_draft": "転記前の文章"
 }

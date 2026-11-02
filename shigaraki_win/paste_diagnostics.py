@@ -43,6 +43,12 @@ def _entry(value):
     for key in FLAGS:
         if type(value.get(key)) is bool:
             result[key] = value[key]
+    attempt = value.get("attempt_in_run")
+    if type(attempt) is int and 1 <= attempt <= 1_000_000:
+        result["attempt_in_run"] = attempt
+    elapsed = value.get("seconds_after_preparation")
+    if type(elapsed) in (int, float) and 0 <= elapsed <= 7 * 86400:
+        result["seconds_after_preparation"] = elapsed
     version = value.get("version")
     if isinstance(version, str) and re.fullmatch(r"\d{1,3}\.\d{1,3}\.\d{1,3}(?:[a-z]\d{1,5})?", version):
         result["version"] = version
