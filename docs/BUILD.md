@@ -4,7 +4,7 @@
 
 ## 前提
 
-開発用Python 3.11以上、Rust/Cargo 1.93.0、CMake 3.20以上、Makeが必要です。Windows向け認識エンジンのビルドには、MinGW-w64の`x86_64-w64-mingw32-gcc`・`g++`・`windres`・`objdump`と、UCRT・静的C++ライブラリを使用します。MinGW GCC 16.1.0によるmacOSからのクロスビルドを確認しています。Windows上のネイティブビルドとMSVC構成は未確認です。
+開発用Python 3.11以上、Rust/Cargo 1.93.0、CMake 3.20以上、Make、`patch`が必要です。Windows向け認識エンジンのビルドには、MinGW-w64の`x86_64-w64-mingw32-gcc`・`g++`・`windres`・`objdump`と、UCRT・静的C++ライブラリを使用します。MinGW GCC 16.1.0によるmacOSからのクロスビルドを確認しています。Windows上のネイティブビルドとMSVC構成は未確認です。
 
 macOSでは、例えばHomebrewの`python@3.11`・`cmake`・`make`・`mingw-w64`・`nsis`でツールを用意できます。Rustは[rustup公式案内](https://rustup.rs/)に従い、次の版とターゲットを入れます。パッケージ更新によりツールの版は変わるため、実際の版も記録してください。
 
@@ -38,9 +38,9 @@ python scripts/build_cpu_engine.py \
   --update-worker-pin
 ```
 
-固定したspeech.cppとggmlのアーカイブを取得してハッシュを検証し、CPUライブラリとRustプログラムをビルドします。GPU・OpenMP・BLASは無効、AVX2・FMA・F16Cは有効です。モデル重みを使わずにビルドできます。
+固定したspeech.cppとggmlのアーカイブを取得してハッシュを検証し、CPUライブラリとRustプログラムをビルドします。GPU・OpenMP・BLASは無効、AVX2・FMA・F16Cは有効です。モデル重みを使わずにビルドできます。取得した固定ソースに、同梱の`third_party/speech-cpu-abort.patch`をSHA-256確認後に適用します。この差分はCPU計算の取消を細かく確認するもので、公開APIやモデル重みは変更しません。
 
-`--work`と`--output`は新規の場所を指定します。既存の成果物は上書きされません。やり直す場合は別の作業ディレクトリと出力先を選びます。`--update-worker-pin`は、生成したexeのサイズとSHA-256を`engine.py`へ反映します。この指定がない場合、ソースの検証値は変更されません。コンパイラやビルドパスによってexeのハッシュは変わり得るため、公開exeとのバイト単位の一致を保証する手順ではありません。
+`--work`と`--output`には新規の場所を指定します。既存の成果物は上書きされません。やり直す場合は別の作業ディレクトリと出力先を選びます。`--update-worker-pin`は、生成したexeのサイズとSHA-256を`engine.py`へ反映すると同時に、対応するビルド記録を`resources/cpu-build.json`へ保存します。この指定がない場合、ソースの検証値とビルド記録は変更されません。コンパイラやビルドパスによってexeのハッシュは変わり得るため、公開exeとのバイト単位の一致を保証する手順ではありません。
 
 ログと`build-result.json`は`--work`の下に残ります。対応するソースとライセンスも、固定commitから再取得できます。
 
@@ -63,15 +63,15 @@ python -m shigaraki_win render-preview build/previews
 
 テストはモデル重みなしで実行できます。2種類のPythonテストを別プロセスで実行し、Qtのウィンドウとアプリを明示的に終了してからRustのホスト用テストを実行します。実マイク・他アプリへの実転記・Windowsの保護設定は、このテストだけでは確認できません。
 
-Windows GNU環境ではRustテストも静的ライブラリが必要です。その場合は、前のビルドで生成された`native/`を`SPEECH_STATIC_DIR`へ指定します。
+Windows GNU環境ではRustテストにも静的ライブラリが必要です。その場合は、前のビルドで生成された`native/`を`SPEECH_STATIC_DIR`へ指定します。
 
 ## 5. セットアップ用exeを作る
 
 ```sh
 python scripts/build_shigaraki_installer.py \
   /path/to/verified-windows-payload \
-  dist/Shigaraki-Windows-0.1.0a5-setup.exe \
-  --build build/installer --version 0.1.0a5
+  dist/Shigaraki-Windows-0.1.0a6-setup.exe \
+  --build build/installer --version 0.1.0a6
 ```
 
 これは検証済みのWindows配布フォルダをNSISでパッケージ化する工程です。Mac用のPythonやDLLをWindows配布物へコピーしても動作しません。Windows用の入力を準備する例は次のとおりです。

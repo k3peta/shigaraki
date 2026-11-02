@@ -11,6 +11,8 @@
 | CPU推論エンジン | Sakasegawa — [speech.cpp](https://github.com/nyosegawa/speech.cpp) | MIT。0.10.0、commit `06590811a90041f935a470ba0e2b85346d2fc041` |
 | テンソル計算 | Georgi Gerganovほか — [ggml](https://github.com/ggml-org/ggml) | MIT。commit `700c9d743ed7cc583c0f1b6507afebb6c0e88bc0` |
 
+信楽は、上表の固定speech.cppに[CPU取消の差分](third_party/speech-cpu-abort.patch)を適用してビルドします。上流の公開APIとモデル重みは変更せず、CPU計算の途中で取消を確認できるようにしています。上流の著作権表示とMIT原文は保持しています。
+
 Haasのモデル構造・学習データ・評価条件は、Third Intelligenceの[公式モデルカード](https://huggingface.co/third-intelligence/Haas-ja-v1.0)を参照してください。GGUF変換とCPU実行を可能にしたのはSakasegawaの公開成果です。信楽では、これらを組み合わせて録音中の字幕を更新しています。Haasの学習やGGUF変換は信楽では行っていません。
 
 初期調査では[foxn2000によるspeech.cppのfork](https://github.com/foxn2000/speech.cpp)も参照しました。今回の配布に使用したソースは、上表のnyosegawaリポジトリの固定commitです。

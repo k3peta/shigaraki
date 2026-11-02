@@ -27,7 +27,8 @@ PYTHON_SHA256 = "80292f0e640e373a54bf09f3b94a1472f976f24a10c5bed0d9622e4e44d6744
 PUNCTUATION_FILES = (("punct.int8.onnx", 37174608, MODEL_SHA),
                      ("tokenizer.json", 6718593, TOKENIZER_SHA))
 ROOT_FILES = ("LICENSE", "README.md", "CREDITS.md", "THIRD_PARTY_NOTICES.md",
-              "CONTRIBUTING.md", "requirements.txt", "requirements-release.txt")
+              "CONTRIBUTING.md", "requirements.txt", "requirements-release.txt",
+              "resources/cpu-build.json")
 IGNORED = {"__pycache__", ".DS_Store", "direct_url.json"}
 PRIVATE_NAMES = {"settings.json", "paste-diagnostics.json", "recognition.jsonl",
                  "startup-error.txt", "install-error.txt", "model-check-error.txt"}
@@ -130,7 +131,7 @@ def public_sources():
     for directory in ("shigaraki_win", "windows_voice_typer", "scripts", "installers", "tests", "docs", "third_party"):
         for relative, path in tree_files(PROJECT / directory):
             if directory == "shigaraki_win" and not (path.suffix == ".py" or path.name in
-                    {"app.ico", "copy.json", "setup-copy.json", "guide.json"}):
+                    {"app.ico", "copy.json", "setup-copy.json", "guide.json", "history-copy.json"}):
                 continue
             entries.append((directory + "/" + relative, path))
     rust = PROJECT / "rust" / "haas-flow"
@@ -174,7 +175,7 @@ def write_manual(output):
             content.extend("<li>" + escape(value) + "</li>" for value in values)
             content.append("</ol>")
     content.append("<p>" + escape(guide.get("preview_note", "")) + "</p>")
-    for name in ("main", "caption", "settings", "setup"):
+    for name in ("main", "caption", "settings", "history", "setup"):
         path = output / "docs/images" / (name + ".png")
         if path.is_file():
             content.append("<img alt='" + name + "' src='data:image/png;base64," + base64.b64encode(path.read_bytes()).decode("ascii") + "'>")
@@ -234,7 +235,8 @@ def build(output, dependencies, python_zip, helper, punctuation, proofreader=Non
         "python": {"version": PYTHON_VERSION, "embedded_zip_sha256": PYTHON_SHA256},
         "python_packages": versions,
         "native_worker": {"filename": "shigaraki-haas-flow.exe", "bytes": engine.WINDOWS_WORKER_BYTES,
-                          "sha256": engine.WINDOWS_WORKER_SHA256, "backend": "CPU static speech.cpp + Rust"},
+                          "sha256": engine.WINDOWS_WORKER_SHA256, "backend": "CPU static speech.cpp + Rust",
+                          "source_build": "resources/cpu-build.json"},
         "model": {"filename": engine.MODEL_NAME, "bytes": engine.MODEL_BYTES, "revision": engine.MODEL_REVISION,
                   "sha256": engine.MODEL_SHA256, "url": engine.MODEL_URL, "included": False},
         "punctuation_model": {"revision": "226c5d4a461ed368264881fc3e6637cbeb68055e",

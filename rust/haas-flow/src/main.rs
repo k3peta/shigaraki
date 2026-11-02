@@ -1,6 +1,6 @@
 mod api;
 mod segments;
-use api::{Active, Api, Model};
+use api::{Active, Api, DecodeError, Model};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use segments::{Segment, Segments, FRAME, RATE};
 use serde::{Deserialize, Serialize};
@@ -65,12 +65,16 @@ struct Metrics {
     max_window_seconds: f64,
     max_backlog_seconds: f64,
     pending_segments_max: usize,
+    preempted_decodes: u64,
+    preempted_decode_seconds: f64,
+    cache_hits: u64,
 }
 struct Session {
     id: u64,
     audio: Vec<f32>,
     seq: u64,
     stop: bool,
+    stop_signal: Arc<AtomicBool>,
     sealed: bool,
     preview: bool,
     cancel: Arc<AtomicBool>,
@@ -91,6 +95,7 @@ impl Session {
             audio: Vec::new(),
             seq: 0,
             stop: false,
+            stop_signal: Arc::new(AtomicBool::new(false)),
             sealed: false,
             preview: true,
             cancel: Arc::new(AtomicBool::new(false)),
@@ -170,6 +175,8 @@ fn apply(state: &mut State, input: Input, active: &Active) -> Result<(), String>
         Input::Stop { id } => {
             if let Some(s) = state.session.as_mut().filter(|s| s.id == id) {
                 s.stop = true;
+                s.stop_signal.store(true, Ordering::Release);
+                active.cancel_preview();
             }
         }
         Input::Cancel { id } => {
@@ -228,6 +235,7 @@ struct Plan {
     audio: Vec<f32>,
     keywords: String,
     cancel: Arc<AtomicBool>,
+    stop_signal: Arc<AtomicBool>,
     cached: Option<String>,
 }
 fn covers_final_tail(audio: &[f32], cached_end: usize, final_end: usize) -> bool {
@@ -236,6 +244,9 @@ fn covers_final_tail(audio: &[f32], cached_end: usize, final_end: usize) -> bool
         && audio[final_end..cached_end].chunks(FRAME).all(|frame| {
             (frame.iter().map(|x| x * x).sum::<f32>() / frame.len() as f32).sqrt() < 0.004
         })
+}
+fn retry_preempted_preview(final_: bool, stop: bool, error: &DecodeError) -> bool {
+    !final_ && stop && *error == DecodeError::Interrupted
 }
 fn plan(s: &mut Session) -> Option<Plan> {
     let available = if s.stop {
@@ -290,6 +301,7 @@ fn plan(s: &mut Session) -> Option<Plan> {
             audio: s.audio[segment.start..segment.end].to_vec(),
             keywords: s.keywords.clone(),
             cancel: s.cancel.clone(),
+            stop_signal: s.stop_signal.clone(),
             cached,
         });
     }
@@ -335,7 +347,12 @@ fn run(model: &mut Model, shared: Shared) -> Result<(), String> {
         let result = if let Some(text) = work.cached.clone() {
             Ok(text)
         } else {
-            model.decode(&work.audio, &work.keywords, &work.cancel)
+            let preview_stop = if !work.final_ {
+                Some(work.stop_signal.as_ref())
+            } else {
+                None
+            };
+            model.decode(&work.audio, &work.keywords, &work.cancel, preview_stop)
         };
         let elapsed = begin.elapsed().as_secs_f64();
         let mut state = lock.lock().unwrap();
@@ -344,6 +361,14 @@ fn run(model: &mut Model, shared: Shared) -> Result<(), String> {
         };
         if s.cancel.load(Ordering::Acquire) {
             continue;
+        }
+        if let Err(error) = &result {
+            if retry_preempted_preview(work.final_, s.stop, error) {
+                s.metrics.preempted_decodes += 1;
+                s.metrics.preempted_decode_seconds += elapsed;
+                s.metrics.decode_seconds += elapsed;
+                continue;
+            }
         }
         if s.draft_start != Some(work.segment.start) {
             s.draft_start = Some(work.segment.start);
@@ -375,6 +400,8 @@ fn run(model: &mut Model, shared: Shared) -> Result<(), String> {
                 .metrics
                 .max_backlog_seconds
                 .max((s.audio.len() - work.segment.end) as f64 / RATE as f64);
+        } else {
+            s.metrics.cache_hits += 1;
         }
         if work.final_ && text.is_empty() && !s.draft.is_empty() {
             let s = state.session.take().unwrap();
@@ -435,7 +462,9 @@ fn main_result() -> Result<(), String> {
     let mut model = Model::load(api, &model_path.ok_or("model required")?, threads)?;
     let model_seconds = loading.elapsed().as_secs_f64();
     let warming = Instant::now();
-    model.decode(&vec![0.; 8000], "", &AtomicBool::new(false))?;
+    model
+        .decode(&vec![0.; 8000], "", &AtomicBool::new(false), None)
+        .map_err(|error| format!("{error:?}"))?;
     output(
         json!({"type":"ready","protocol":1,"engine":"haas-rust","device":"CPU","threads":threads,
             "library_seconds":library_seconds,"model_seconds":model_seconds,"warmup_seconds":warming.elapsed().as_secs_f64()}),
@@ -450,6 +479,40 @@ fn main_result() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_an_interrupted_preview_at_stop_can_be_retried() {
+        assert_eq!(
+            retry_preempted_preview(false, true, &DecodeError::Interrupted),
+            true
+        );
+        assert!(!retry_preempted_preview(
+            true,
+            true,
+            &DecodeError::Interrupted
+        ));
+        assert!(!retry_preempted_preview(
+            false,
+            false,
+            &DecodeError::Interrupted
+        ));
+        assert!(!retry_preempted_preview(
+            false,
+            true,
+            &DecodeError::Native("failure".into())
+        ));
+    }
+    #[test]
+    fn stopping_a_work_item_never_stops_a_new_session() {
+        let mut s = Session::new(1, String::new());
+        s.audio = vec![0.2; RATE];
+        let work = plan(&mut s).unwrap();
+        s.stop_signal.store(true, Ordering::Release);
+        assert!(work.stop_signal.load(Ordering::Acquire));
+        assert!(!Session::new(2, String::new())
+            .stop_signal
+            .load(Ordering::Acquire));
+        assert!(!work.cancel.load(Ordering::Acquire));
+    }
     #[test]
     fn five_minute_stop_keeps_its_final_callback_tail_but_is_bounded() {
         assert!(audio_fits(300 * RATE, 32000));

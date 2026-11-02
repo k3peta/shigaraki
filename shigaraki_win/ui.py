@@ -222,6 +222,15 @@ class MainWindow(QMainWindow):
         self.settings_scroll.setWidget(settings)
         self.tabs.addTab(self.settings_scroll, COPY["settings"])
 
+        from .history_ui import HistoryTab, HISTORY_COPY
+        self.history = HistoryTab()
+        self.history.open_folder.connect(self.open_log.emit)
+        self.history_scroll = QScrollArea()
+        self.history_scroll.setWidgetResizable(True)
+        self.history_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.history_scroll.setWidget(self.history)
+        self.tabs.addTab(self.history_scroll, HISTORY_COPY["history"])
+
         self.status = QLabel(COPY["ready"])
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setWordWrap(True)
@@ -238,9 +247,16 @@ class MainWindow(QMainWindow):
         self.raw_button = QPushButton(COPY["copy_raw"])
         self.raw_button.clicked.connect(self.copy_raw.emit)
         layout.addWidget(self.raw_button)
+        self.tabs.currentChanged.connect(self._tab_changed)
         self.busy(False)
 
+    def _tab_changed(self, index):
+        show_last = self.tabs.currentWidget() is not self.history_scroll
+        for button in (self.copy_button, self.paste_button, self.raw_button):
+            button.setVisible(show_last)
+
     def busy(self, busy: bool, recording=False, finishing=False):
+        self.history.set_paused(busy)
         self.record.setEnabled(not busy or recording)
         self.record.setIcon(wave_icon(recording))
         title = COPY["stop" if recording else "start"]

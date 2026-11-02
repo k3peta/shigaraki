@@ -82,21 +82,32 @@ impl Api {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+struct Request {
+    ptr: usize,
+    preview: bool,
+}
 pub struct Active {
     api: Arc<Api>,
-    request: Mutex<usize>,
+    request: Mutex<Request>,
 }
 impl Active {
     pub fn new(api: Arc<Api>) -> Arc<Self> {
         Arc::new(Self {
             api,
-            request: Mutex::new(0),
+            request: Mutex::new(Request::default()),
         })
     }
     pub fn cancel(&self) {
+        self.cancel_matching(false);
+    }
+    pub fn cancel_preview(&self) {
+        self.cancel_matching(true);
+    }
+    fn cancel_matching(&self, preview_only: bool) {
         let p = self.request.lock().unwrap();
-        if *p != 0 {
-            unsafe { (self.api.speech_request_cancel)(*p as P) }
+        if p.ptr != 0 && (!preview_only || p.preview) {
+            unsafe { (self.api.speech_request_cancel)(p.ptr as P) }
         }
     }
 }
@@ -110,7 +121,7 @@ struct Handle<'a> {
 struct InFlight<'a>(&'a Active);
 impl Drop for InFlight<'_> {
     fn drop(&mut self) {
-        *self.0.request.lock().unwrap() = 0;
+        *self.0.request.lock().unwrap() = Request::default();
     }
 }
 impl Drop for Handle<'_> {
@@ -122,6 +133,16 @@ pub struct Model {
     api: Arc<Api>,
     ptr: P,
     pub active: Arc<Active>,
+}
+#[derive(Debug, PartialEq)]
+pub enum DecodeError {
+    Interrupted,
+    Native(String),
+}
+impl From<String> for DecodeError {
+    fn from(message: String) -> Self {
+        Self::Native(message)
+    }
 }
 impl Model {
     pub fn load(api: Arc<Api>, path: &Path, threads: i32) -> Result<Self, String> {
@@ -171,9 +192,13 @@ impl Model {
         audio: &[f32],
         keywords: &str,
         cancel: &AtomicBool,
-    ) -> Result<String, String> {
+        preview_stop: Option<&AtomicBool>,
+    ) -> Result<String, DecodeError> {
+        if preview_stop.is_some_and(|stop| stop.load(Ordering::Acquire)) {
+            return Err(DecodeError::Interrupted);
+        }
         if audio.is_empty() || audio.len() > 12 * 16000 || audio.iter().any(|x| !x.is_finite()) {
-            return Err("invalid audio".into());
+            return Err(DecodeError::Native("invalid audio".into()));
         }
         let mut request = ptr::null_mut();
         self.api
@@ -210,15 +235,22 @@ impl Model {
                 )
             })?;
         }
-        *self.active.request.lock().unwrap() = request.ptr as usize;
+        *self.active.request.lock().unwrap() = Request {
+            ptr: request.ptr as usize,
+            preview: preview_stop.is_some(),
+        };
         let in_flight = InFlight(&self.active);
-        if cancel.load(Ordering::Acquire) {
+        // Recheck after publishing the handle: Stop may arrive between planning
+        // and native request creation. Final recognition is never preemptible.
+        if cancel.load(Ordering::Acquire)
+            || preview_stop.is_some_and(|stop| stop.load(Ordering::Acquire))
+        {
             self.active.cancel();
         }
         let status = unsafe { (self.api.speech_transcribe)(request.ptr) };
         drop(in_flight);
         if cancel.load(Ordering::Acquire) || status == 1 {
-            return Err("cancelled".into());
+            return Err(DecodeError::Interrupted);
         }
         self.api.check(status)?;
         let result = unsafe { (self.api.speech_request_result)(request.ptr) };

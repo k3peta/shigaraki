@@ -1,0 +1,92 @@
+--- a/src/common/error.h
++++ b/src/common/error.h
+@@ -37,6 +37,12 @@
+     std::string input_;
+ };
+ 
++/** Reports exactly the backend's aborted-graph status without losing its identity. */
++class GraphAborted final : public Error {
++public:
++    explicit GraphAborted(const std::string & device) : Error(Fault::Device, "the device " + device + " aborted a graph") {}
++};
++
+ /**
+  * Runs `body` and names `input` in an Error it throws that names none, unless the Error is of a device or of memory,
+  * which concerns no input: what a call that takes several files does to say which one failed.
+@@ -45,6 +51,8 @@
+ auto naming(const std::string & input, Body && body) -> decltype(body()) {
+     try {
+         return body();
++    } catch (const GraphAborted &) {
++        throw;
+     } catch (const Error & e) {
+         if (!e.input().empty() || e.fault() == Fault::Device || e.fault() == Fault::OutOfMemory) throw;
+         throw Error(e.fault(), e.what(), input);
+--- a/src/common/graph.cpp
++++ b/src/common/graph.cpp
+@@ -26,6 +26,7 @@
+         }
+         throw Error(Fault::Device, "the device " + device + " failed to compute a graph: " + e.what());
+     }
++    if (status == GGML_STATUS_ABORTED) throw GraphAborted(device);
+     if (status == GGML_STATUS_ALLOC_FAILED) throw Error(Fault::OutOfMemory, "the memory of " + device + " ran out while it computed a graph");
+     if (status != GGML_STATUS_SUCCESS) throw Error(Fault::Device, "the device " + device + " failed to compute a graph");
+ }
+--- a/src/api/request.cpp
++++ b/src/api/request.cpp
+@@ -12,6 +12,7 @@
+ #include <vector>
+ 
+ #include "api.h"
++#include "ggml-cpu.h"
+ #include "error.h"
+ #include "language.h"
+ #include "resample.h"
+@@ -188,6 +189,29 @@
+     void * user_data_;
+     bool stop_ = false, passed_ = false;
+     uint64_t samples_ = 0;
++};
++
++/** Keeps a request's CPU abort callback inside its model's serialized work. */
++class CpuRequestAbortScope {
++public:
++    explicit CpuRequestAbortScope(speech_request & request)
++        : backend_(ggml_backend_is_cpu(request.model->backend.get()) ? request.model->backend.get() : nullptr) {
++        if (backend_) ggml_backend_cpu_set_abort_callback(backend_, cancelled, &request);
++    }
++
++    CpuRequestAbortScope(const CpuRequestAbortScope &) = delete;
++    CpuRequestAbortScope & operator=(const CpuRequestAbortScope &) = delete;
++
++    ~CpuRequestAbortScope() {
++        if (backend_) ggml_backend_cpu_set_abort_callback(backend_, nullptr, nullptr);
++    }
++
++private:
++    static bool cancelled(void * data) {
++        return static_cast<speech_request *>(data)->cancelled.load();
++    }
++
++    ggml_backend_t backend_;
+ };
+ 
+ /**
+@@ -239,10 +263,15 @@
+     result->task = task;
+     RequestRun run(*request, [](const float *, size_t, void *) { return 0; }, nullptr);
+     std::lock_guard<std::mutex> lock(request->model->busy);
++    CpuRequestAbortScope abort(*request);
+     spend(*request, run, [&] {
+         if (run.stopped()) return;
+-        const std::vector<float> samples = Resampler(request->sample_rate, request->model->file->sample_rate)(request->audio);
+-        work(samples, values, run, *result);
++        try {
++            const std::vector<float> samples = Resampler(request->sample_rate, request->model->file->sample_rate)(request->audio);
++            work(samples, values, run, *result);
++        } catch (const GraphAborted &) {
++            if (!run.stopped()) throw;
++        }
+     });
+     if (run.stopped()) result->stop = SPEECH_STOP_CANCELLED;
+     const speech_status status = run.stopped() ? SPEECH_CANCELLED : SPEECH_OK;

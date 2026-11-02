@@ -18,6 +18,8 @@
 | MinGW-w64・winpthreads | [MinGW-w64原文](third_party/MinGW-w64-COPYING.txt)、[winpthreads原文](third_party/MinGW-winpthreads-COPYING.txt) |
 | LLVM/OpenMP | [原文](third_party/LLVM-OpenMP.txt)、任意の校正ランタイム等に付属するもの |
 
+speech.cppには、信楽で作成した[CPU取消の差分](third_party/speech-cpu-abort.patch)をビルド時に適用します。対応する固定ソースと、この差分の両方を案内しています。
+
 上流のライセンス原文やモデルカードは、著作権表示・注記を含めて保持します。句読点モデルのライセンスファイルにあるソース限定の注記も削除せず、重みの条件を明記したモデルカードと併記しています。
 
 ## Python・画面ライブラリ

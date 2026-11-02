@@ -13,12 +13,18 @@
       "root": "ggml-700c9d743ed7cc583c0f1b6507afebb6c0e88bc0"
     }
   },
+  "patches": [
+    {
+      "file": "third_party/speech-cpu-abort.patch",
+      "sha256": "18d159426605695eb665a5a44323ac981860768aa38603108da4dcc3c509998a"
+    }
+  ],
   "rust": "rustc 1.93.0 (254b59607 2026-01-19)",
   "cargo": "cargo 1.93.0 (083ac5135 2025-12-15)",
   "target": "x86_64-pc-windows-gnu",
   "mingw": "16.1.0",
-  "helper_bytes": 6140416,
-  "helper_sha256": "479df1bda0f5bdf80bb71f67a57463969df2f5a81f6c44defd40bee4a6ae59f5",
+  "helper_bytes": 6145536,
+  "helper_sha256": "0b9953a1a503158d842273d2ce61a8fff6a825056cf973772798b1a6cd1a21d5",
   "system_dll_imports": [
     "ADVAPI32.dll",
     "KERNEL32.dll",
@@ -37,7 +43,7 @@
     "ntdll.dll",
     "api-ms-win-core-synch-l1-2-0.dll"
   ],
-  "worker_pin_updated": false,
+  "worker_pin_updated": true,
   "model_weights_used": false,
   "windows_execution_tested": false,
   "upstream_metadata_symlinks_omitted": [
@@ -45,5 +51,5 @@
     "speech.cpp-06590811a90041f935a470ba0e2b85346d2fc041/.claude/skills",
     "ggml-700c9d743ed7cc583c0f1b6507afebb6c0e88bc0/.pi/SYSTEM.md"
   ],
-  "application_version": "0.1.0a3"
+  "application_version": "0.1.0a6"
 }
