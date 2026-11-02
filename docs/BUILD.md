@@ -1,4 +1,6 @@
-# ソースから実行・ビルドする
+# Windows版をソースから実行・ビルドする
+
+このページはWindows版の手順です。Mac版のSwiftアプリをビルドする場合は、[BUILD_MACOS.md](BUILD_MACOS.md)を参照してください。
 
 画面・マイク・転記はPython、Haasの認識制御はRust、CPU推論はspeech.cppです。ソースにモデル重みやWindows用実行ファイルは含めていません。ライセンスと固定版は[CREDITS.md](../CREDITS.md)と[第三者ライセンス案内](../THIRD_PARTY_NOTICES.md)を参照してください。
 
@@ -52,7 +54,7 @@ Windows側へ、ソース・`speech/`・`punctuation/`を同じ配置でコピ�
 python -m shigaraki_win run
 ```
 
-アプリの準備画面からHaasモデルを取得し、マイクを選択します。Mac/Linuxでは通常の録音・転記アプリとしての起動は対象外です。
+アプリの準備画面からHaasモデルを取得し、マイクを選択します。このPython版はMac/Linuxでの通常の録音・転記には対応していません。Macでは[macos/のSwift版](../macos/README.md)を使います。
 
 ## 4. テストと画面プレビュー
 

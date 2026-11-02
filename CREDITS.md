@@ -2,6 +2,8 @@
 
 信楽の音声認識・句読点補完・画面表示は、以下の公開成果とライブラリを利用しています。モデルや推論エンジンの開発成果は、それぞれの作者に帰属します。
 
+認識モデル・GGUF・CPU推論の表はWindows版とMac版に共通です。句読点補完、Qwenによる生成校正、Python・Qtの説明はWindows版を対象としています。
+
 ## 認識モデルと推論
 
 | 使用箇所 | 作者・プロジェクト | 条件・固定版 |
@@ -33,9 +35,17 @@ Python Software Foundation / CPython、Qt Project・The Qt Companyほか / PySid
 
 Rust・Rustクレート、MinGW-w64・GCC・winpthreads、NSISもビルドや配布を支えています。詳細なライセンス原文と対応ソースは[第三者ライセンス案内](THIRD_PARTY_NOTICES.md)から確認できます。
 
+## Mac版の画面・整形・同梱データ
+
+Mac版はSwiftUI・AppKit・AVFoundationで画面・収音・転記を実装し、Rust製補助プログラムと上表のspeech.cppでHaasをCPU実行します。文章整形はApple Intelligenceの端末内モデルを使う任意の機能です。Appleの各機能はmacOSが提供するもので、信楽独自のモデルではありません。
+
+PDFマニュアルの生成にはNoto Sans JPを使用し、[SIL OFL原文](macos/docs/fonts/OFL.txt)と著作権表示を残しています。Apple SymbolsはmacOS標準のフォントを生成時に参照し、フォントファイル自体は配布しません。
+
+地名検索には、日本郵便のUTF-8郵便番号データ（2026年9月30日版）から抽出した都道府県・市区町村1,939項目を使います。[出典・取得日時・SHA-256](macos/Sources/KoeFlowCore/Resources/geography-source.json)と[日本郵便のデータ説明](https://www.post.japanpost.jp/service/search/zipcode/download/utf-readme.html)を参照してください。
+
 ## 信楽が追加する部分と謝辞
 
-信楽は、録音操作、大小ウィンドウ、途中字幕の表示制御、Rust側の音声区間管理、辞書と文脈の接続、入力先の検査・転記・復旧、導入手順を追加しています。従来の[声吉Windows版](https://github.com/k3peta/koekichi-win)から派生しており、MITの元の著作権表示を保持しています。
+信楽は、録音操作、大小ウィンドウ、途中字幕の表示制御、Rust側の音声区間管理、辞書と文脈の接続、入力先の検査・転記・復旧、導入手順を追加しています。Windows版は、従来の[声吉Windows版](https://github.com/k3peta/koekichi-win)から派生しており、MITの元の著作権表示を保持しています。
 
 [iiinno / OpenHinoVoice](https://github.com/iiinno/OpenHinoVoice)は、Haas・speech.cppを使う音声入力アプリとして、また出典・公開方法の参考として挙げています。今回の公開用ソースへOpenHinoVoiceのソースファイルは取り込んでいません。
 

@@ -22,7 +22,15 @@ speech.cppには、信楽で作成した[CPU取消の差分](third_party/speech-
 
 上流のライセンス原文やモデルカードは、著作権表示・注記を含めて保持します。句読点モデルのライセンスファイルにあるソース限定の注記も削除せず、重みの条件を明記したモデルカードと併記しています。
 
-## Python・画面ライブラリ
+## Mac版の構成と同梱物
+
+Mac版は、上記のHaas・GGUF・speech.cpp・ggmlと、[Rustの依存記録](macos/third_party/rust/dependencies.json)にあるライブラリを使用します。上流ライセンス原文は[macos/third_party](macos/third_party)に同梱します。Haasの重みはソースやDMGに含めず、アプリの初回準備で固定revisionから取得します。
+
+SwiftUI・AppKit・AVFoundationと任意のApple Intelligence整形は、macOSの機能を利用します。Windows版の句読点モデル・Qwen・Python・Qtに関する説明は、Mac版の配布構成には適用しません。
+
+マニュアル用のNoto Sans JPはSIL OFL 1.1で提供され、[著作権表示と原文](macos/docs/fonts/OFL.txt)をそのまま残しています。Apple Symbolsのフォントファイルは配布しません。日本郵便から加工した地名データは、[出典・固定データの記録](macos/Sources/KoeFlowCore/Resources/geography-source.json)と[上流の説明・利用条件](https://www.post.japanpost.jp/service/search/zipcode/download/utf-readme.html)を案内しています。
+
+## Windows版のPython・画面ライブラリ
 
 CPythonはPSFライセンス、NumPyはBSD系、sounddeviceはMIT、PortAudioはMIT系、comtypesはMIT、ONNX RuntimeはMIT、tokenizersはApache-2.0です。配布物の`runtime/`内に、各パッケージ付属のライセンスと第三者通知を残しています。ソース実行に使うPython依存パッケージの版は`requirements.txt`で固定し、公開exeの版は同梱の`upstream.json`にも記録します。
 
