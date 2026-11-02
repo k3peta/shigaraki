@@ -843,6 +843,7 @@ class UiStateTests(unittest.TestCase):
         self.assertTrue(saved["proof_enabled"])
         self.assertFalse(saved["proof_ready"])
         self.assertAlmostEqual(saved["seconds_after_preparation"], 2.025)
+        self.assertEqual(saved["attempt_in_run"], 1)
         self.assertEqual(saved["proofreading"]["sentences_checked"], 2)
         self.assertEqual(saved["proofreading"]["suggestions_rejected"], 1)
         self.assertEqual(saved["proofreading"]["max_context_chars"], 40)
@@ -852,6 +853,14 @@ class UiStateTests(unittest.TestCase):
         self.drive_paste(lambda *_: None, safe=False)
         saved = json.loads((self.root / "paste-diagnostics.json").read_text())
         self.assertIsNone(saved["seconds_after_preparation"])
+
+    def test_transfer_attempt_number_advances_without_automatic_retries(self):
+        self.drive_paste(lambda *_: None, safe=False)
+        self.drive_paste(lambda *_: None, safe=False)
+        saved = json.loads((self.root / "paste-diagnostics.json").read_text())
+        self.assertEqual(saved["attempt_in_run"], 2)
+        self.assertEqual([row["attempt_in_run"] for row in saved["recent_attempts"]], [1, 2])
+        self.app.native.send_paste.assert_not_called()
 
     def test_fallback_diagnostics_record_the_boundary_without_editor_contents(self):
         self.app.native.last_target_reason = "captured_clipboard_value"

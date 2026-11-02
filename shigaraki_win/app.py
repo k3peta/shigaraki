@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from windows_voice_typer.recorder import Recorder
 from .engine import CpuEngine, data_dir, default_model, prepare_model
-from .gestures import ControlGesture, SHORTCUT_KEYS
+from .gestures import ControlGesture, WindowGesture, SHORTCUT_KEYS
 from .native import WindowsInput, normalize_newlines
 from .context import ShortContext, same_field
 from .page_context import PageContext, combine_reference, excluded
@@ -90,12 +90,19 @@ class App:
         self.cancelled = False
         self.quitting = False
         self.hold_stops = False
+        self.commit_requested = False
+        self.record_prefix = ""
+        self.raw_prefix = ""
+        self.session_raw = None
         self.last_capture = 0.0
         self.last_checkpoint = 0.0
         self.last_diagnostics = 0.0
-        self.current_text = self.read_json(data_dir() / "last-input.json", {}).get("text", "")
+        self.paste_attempts = 0
+        previous = self.read_json(data_dir() / "last-input.json", {})
+        self.draft_pending = previous.get("outcome") in ("draft", "recognizing", "notAttempted", "sendFailed")
+        self.current_text = previous.get("text", "")
         self.last_input = self.current_text
-        self.raw_text = self.read_json(data_dir() / "last-input.json", {}).get("raw_text", self.current_text)
+        self.raw_text = previous.get("raw_text", self.current_text)
         self.main.editor.setPlainText(self.current_text)
         self.main.modifier.setCurrentIndex(int(self.settings.get("modifier", 0)))
         self.main.log_enabled.setChecked(bool(self.settings.get("log", True)))
@@ -110,17 +117,19 @@ class App:
         self.update_words()
         self.control = ControlGesture()
         self.alt = ControlGesture()
+        self.window_control = WindowGesture()
+        self.window_alt = WindowGesture()
         self._shortcut_diagnosed = set()
         self.main.toggle_recording.connect(self.toggle_recording)
         self.main.cancel_recording.connect(self.cancel_recording)
         self.main.copy_last.connect(self.copy_last)
         self.main.copy_raw.connect(self.copy_raw)
-        self.main.paste_last.connect(lambda: self.paste(self.main.editor.toPlainText(), self.last_target))
+        self.main.paste_last.connect(lambda: self.commit_window(force=True))
         self.main.prepare_model.connect(lambda: self.prepare(retry_proof=True))
         self.main.add_word.connect(self.add_word)
         self.main.closed.connect(self.closed)
         self.main.open_log.connect(self.open_log)
-        self.main.editor.textChanged.connect(lambda: self.main.busy(self.phase != "idle", self.phase == "recording"))
+        self.main.editor.textChanged.connect(self.editor_changed)
         self.main.modifier.currentIndexChanged.connect(self.save_settings)
         self.main.log_enabled.toggled.connect(self.save_settings)
         self.main.proof_enabled.toggled.connect(self.save_settings)
@@ -227,8 +236,10 @@ class App:
             fresh = self.native.capture()
             if fresh:
                 self.last_target = fresh
+                self.target = fresh
             elif self.native.foreground()[1] != os.getpid():
                 self.last_target = None
+                self.target = None
                 self.context_memory.clear()
         self.panel.hide()
         self.main.showNormal()
@@ -244,8 +255,55 @@ class App:
             self.show_main()
 
     def closed(self):
+        self.commit_requested = False
+        self.persist_edited_draft()
         if self.phase == "recording":
             self.cancel_recording()
+
+    def editor_changed(self):
+        if self.phase == "idle":
+            self.current_text = self.main.editor.toPlainText()
+        self.main.busy(self.phase != "idle", self.phase == "recording", self.phase == "finishing")
+
+    def has_pending_draft(self):
+        # A new ASR draft remains pending even unchanged. Edits to a transferred
+        # result are pending only while they differ, so Undo cannot resend it.
+        return self.draft_pending or self.main.editor.toPlainText() != self.last_input
+
+    def persist_edited_draft(self):
+        if self.phase == "idle" and self.has_pending_draft():
+            text = self.main.editor.toPlainText()
+            if text and text != self.last_input:
+                self.draft_pending = True
+                self.current_text = self.last_input = text
+                self.retain(text, "draft")
+
+    @staticmethod
+    def join_recording(prefix, text):
+        if not prefix:
+            return text
+        if not text:
+            return prefix
+        return prefix + ("" if prefix.endswith(("\n", " ")) else "\n") + text
+
+    def commit_window(self, *, force=False):
+        if self.phase not in ("idle", "recording", "finishing"):
+            return
+        if self.phase in ("recording", "finishing"):
+            self.commit_requested = True
+            if self.phase == "recording":
+                self.stop()
+            return
+        self.commit_requested = False
+        text = self.main.editor.toPlainText()
+        if text and (force or self.has_pending_draft()):
+            if self.native.foreground()[1] != os.getpid():
+                self.target = self.last_target = self.native.capture()
+            self.current_text = self.last_input = text
+            self.paste(text, self.target, close_window=True)
+        else:
+            self.main.hide()
+            self.panel.hide()
 
     def tick(self):
         now = time.monotonic()
@@ -261,8 +319,8 @@ class App:
         if self.quitting:
             if (not self.session or self.session.done.is_set()) and (not self.model_thread or not self.model_thread.is_alive()):
                 if self.session and self.session.text:
-                    self.raw_text = self.session.text
-                    self.retain(self.session.text, "cancelled")
+                    self.raw_text = self.join_recording(self.raw_prefix, self.session.text)
+                    self.retain(self.join_recording(self.record_prefix, self.session.text), "cancelled")
                 self.engine.close()
                 self.proof_engine.close()
                 self.punctuation_engine.close()
@@ -284,16 +342,48 @@ class App:
         elif self.phase in ("recording", "finishing") and not self.cancelled and not self.panel.isVisible():
             self.panel.show_near_bottom()
         modifier = self.main.modifier.currentIndex()
-        for gesture, key, is_control in [(self.control, 0xA2, True), (self.alt, 0xA4, False)]:
+        main_visible = self.main.presented()
+        for gesture, window_gesture, key, is_control in [
+                (self.control, self.window_control, 0xA2, True),
+                (self.alt, self.window_alt, 0xA4, False)]:
             selected = is_control == (modifier == 0)
             down = self.native.key_down(key)
             # Modifier states plus keyboard/mouse interactions cancel an unarmed hold.
             isolated = not down or not any(self.native.key_down(k) for k in SHORTCUT_KEYS
                                           if k not in {key, 0x10, 0x11, 0x12})
             setup_pending = self.setup.isVisible() and not self.setup.ready
-            allow = not setup_pending and selected and (self.phase == "idle" or self.phase == "recording" and self.continuous)
-            actions = gesture.update(now, down, isolated, busy=self.phase != "idle" or setup_pending, allow_hold=allow)
-            self.shortcut_diagnostic(now, key, gesture, down, isolated, selected, actions)
+            was_holding = gesture.holding
+            allow = (not main_visible and not setup_pending and selected and
+                     (self.phase == "idle" or self.phase == "recording" and self.continuous))
+            actions = gesture.update(now, down, isolated,
+                busy=self.phase != "idle" or setup_pending or main_visible, allow_hold=allow)
+            if not main_visible:
+                self.shortcut_diagnostic(now, key, gesture, down, isolated, selected, actions)
+            # Drain the small-window gesture even while the main window is open.
+            # A hold begun in the small window still stops on its own release.
+            large = main_visible and not was_holding and not (self.phase == "recording" and not self.continuous)
+            if large and selected and not setup_pending and self.phase in ("idle", "recording", "finishing"):
+                window_isolated = not any(self.native.key_down(k) for k in SHORTCUT_KEYS
+                    if k not in {key, 0x10, 0x11, 0x12}) if down or window_gesture.pending else True
+                window_actions = window_gesture.update(now, down, window_isolated,
+                    can_toggle=self.phase in ("idle", "recording"), recording=self.phase == "recording")
+                for action in window_actions:
+                    if action == "single_tap":
+                        self.toggle_recording()
+                    elif action == "double_tap":
+                        self.commit_window()
+            elif (not main_visible and selected and not was_holding and
+                  (self.phase in ("finishing", "pasting", "modelSetup") or
+                   self.phase == "idle" and window_gesture.pending)):
+                # Background work must not make its status unreachable. Use
+                # double-only detection: no recording or delayed single tap.
+                window_isolated = not any(self.native.key_down(k) for k in SHORTCUT_KEYS
+                    if k not in {key, 0x10, 0x11, 0x12}) if down or window_gesture.pending else True
+                if "double_tap" in window_gesture.update(now, down, window_isolated,
+                        can_toggle=False, recording=False):
+                    self.show_main()
+            else:
+                window_gesture.reset(block_until_up=down)
             for action in actions:
                 if action == "double_tap" and selected:
                     self.toggle_main()
@@ -379,8 +469,16 @@ class App:
             return
         if self.setup.ready:
             self.setup.hide()
+        previous_editor, previous_raw, previous_pending = self.main.editor.toPlainText(), self.raw_text, self.draft_pending
+        self.record_prefix = previous_editor if continuous and self.has_pending_draft() else ""
+        self.raw_prefix = self.raw_text if self.record_prefix else ""
+        self.session_raw = ""
+        self.commit_requested = False
+        for window_gesture in (self.window_control, self.window_alt):
+            window_gesture.reset(block_until_up=True)
         fresh = self.native.capture()
         self.target = fresh or (self.last_target if self.native.foreground()[1] == os.getpid() else None)
+        self.last_target = self.target
         reference_target = fresh
         if reference_target is None and self.target and self.native.unchanged(self.target):
             reference_target = self.target
@@ -388,10 +486,10 @@ class App:
         self.continuous = continuous
         self.cancelled = False
         self.phase = "recording"
-        self.current_text = ""
+        self.current_text = self.record_prefix
         self.correction_metrics = {}
         self.proof_wait_until = None
-        self.main.editor.clear()
+        self.main.editor.setPlainText(self.record_prefix)
         self.main.status.setText("")
         self.main.tabs.setCurrentIndex(0)
         self.main.busy(True, True)
@@ -401,7 +499,9 @@ class App:
         except Exception as error:
             self.phase = "idle"
             self.recorder = None
-            self.main.editor.setPlainText(self.last_input)
+            restored = previous_editor if continuous else previous_editor or self.last_input
+            self.current_text, self.raw_text, self.draft_pending = restored, previous_raw, previous_pending
+            self.main.editor.setPlainText(restored)
             self.main.status.setText(COPY["microphone_failed"])
             self.main.busy(False)
             try:
@@ -414,7 +514,7 @@ class App:
                 QTimer.singleShot(10000, lambda: self.panel.hide() if self.phase == "idle" else None)
             return
         generation = self.generation
-        self.raw_text = ""
+        self.raw_text = self.raw_prefix
         self.correction_metrics = {}
         rules = self.word_rules()
         protected = tuple(dict.fromkeys(written for _, written in rules))
@@ -459,18 +559,23 @@ class App:
 
     def session_caption(self, generation, text):
         if generation == self.generation and self.phase in ("recording", "finishing"):
-            self.raw_text = text
+            self.session_raw = text
+            self.raw_text = self.join_recording(self.raw_prefix, text)
             value = format_text(text, self.word_rules())
-            self.caption(self.proofreader.update(value) if self.proofreader else value)
+            self.recording_caption(self.proofreader.update(value) if self.proofreader else value)
 
     def session_utterance(self, generation, text):
         if generation == self.generation and self.phase in ("recording", "finishing") and self.proofreader:
-            self.raw_text = text
-            self.caption(self.proofreader.update(format_text(text, self.word_rules()), final=True))
+            self.session_raw = text
+            self.raw_text = self.join_recording(self.raw_prefix, text)
+            self.recording_caption(self.proofreader.update(format_text(text, self.word_rules()), final=True))
 
     def proofread_caption(self, generation):
         if generation == self.generation and self.phase in ("recording", "finishing") and self.proofreader:
-            self.caption(self.proofreader.snapshot()[1])
+            self.recording_caption(self.proofreader.snapshot()[1])
+
+    def recording_caption(self, text):
+        self.caption(self.join_recording(self.record_prefix, text))
 
     def caption(self, text):
         self.current_text = text
@@ -522,8 +627,8 @@ class App:
         self.tray.setIcon(wave_icon())
         self.phase = "idle"
         self.main.busy(False)
-        text = session.text or self.current_text
-        self.raw_text = text
+        text = session.text or (self.session_raw if self.session_raw is not None else self.current_text)
+        self.raw_text = self.join_recording(self.raw_prefix, text)
         original = format_text(text, self.word_rules())
         text = original
         if self.proofreader:
@@ -532,7 +637,13 @@ class App:
             self.correction_metrics = dict(self.proofreader.metrics)
             self.proofreader = None
         if self.cancelled or session.error:
+            self.commit_requested = False
+            self.window_control.reset(block_until_up=True)
+            self.window_alt.reset(block_until_up=True)
+            text = self.join_recording(self.record_prefix, text)
             if text:
+                self.last_input = text
+                self.draft_pending = self.continuous
                 self.caption(text)
                 self.retain(text, "cancelled" if self.cancelled else "recognitionFailed")
             else:
@@ -540,12 +651,15 @@ class App:
             self.main.status.setText(COPY["cancelled" if self.cancelled else "failed"])
             self.panel.hide()
             return
-        if not text:
+        if not text and not self.record_prefix:
+            self.commit_requested = False
+            self.window_control.reset(block_until_up=True)
+            self.window_alt.reset(block_until_up=True)
             self.main.editor.setPlainText(self.last_input)
             self.main.status.setText(COPY["silence"])
             self.panel.hide()
             return
-        if quick_punctuation:
+        if text and quick_punctuation:
             began = time.monotonic()
             try:
                 protected = tuple(dict.fromkeys(written for _,written in self.word_rules()))
@@ -555,10 +669,19 @@ class App:
             except Exception as error:
                 # Never lose or delay the ASR text when optional punctuation fails.
                 self.punctuation_error = type(error).__name__
+        text = self.join_recording(self.record_prefix, text)
         self.last_input = text
         self.caption(text)
-        self.retain(text, "recognizing")
-        self.paste(text, self.target)
+        if self.continuous:
+            self.draft_pending = True
+            self.retain(text, "draft")
+            self.panel.hide()
+            self.main.status.setText(COPY["draft_ready"])
+            if self.commit_requested:
+                self.commit_window()
+        else:
+            self.retain(text, "recognizing")
+            self.paste(text, self.target)
 
     def save_stream_diagnostics(self, session):
         if not hasattr(session, "metrics"):
@@ -601,11 +724,18 @@ class App:
             self.qt.clipboard().setText(self.raw_text)
             self.main.status.setText(COPY["raw_copied"])
 
-    def paste(self, text, target):
+    def paste(self, text, target, *, close_window=False):
         if not text or self.phase != "idle":
             return
+        self.draft_pending = False
+        self.last_input = text
+        self.paste_attempts += 1
+        attempt_in_run = self.paste_attempts
         self.phase = "pasting"
         self.main.busy(True)
+        if close_window and target:
+            self.main.hide()
+            self.panel.hide()
         started = time.monotonic()
 
         def attempt():
@@ -653,6 +783,12 @@ class App:
         def complete(outcome, readback="not_checked"):
             self.phase = "idle"
             self.main.busy(False)
+            if outcome in ("notAttempted", "sendFailed"):
+                self.draft_pending = True
+                if close_window:
+                    self.main.showNormal()
+                    self.main.raise_()
+                    self.main.activateWindow()
             self.retain(text, outcome, target=target)
             reason = getattr(self.native, "last_target_reason", "unavailable")
             prepare_reason = getattr(self.native, "last_prepare_reason", "not_checked")
@@ -671,6 +807,7 @@ class App:
                         target_app = ""
                 self.write_json(diagnostic_path, with_history(diagnostic_path, {
                     "version": __version__, "outcome": outcome,
+                    "attempt_in_run": attempt_in_run,
                     "target_capture": reason if isinstance(reason, str) else "unavailable",
                     "capture_fallback_from": capture_fallback if isinstance(capture_fallback, str) else "",
                     "capture_error_type": capture_error if isinstance(capture_error, str) else "",
@@ -707,6 +844,7 @@ class App:
                 if outcome == "confirmed":
                     fresh = self.native.capture()
                     self.last_target = fresh if same_field(fresh, target) else None
+                    self.target = self.last_target
                     try:
                         matched = (self.main.context_enabled.isChecked()
                             and same_field(fresh, target) and normalize_newlines(fresh.value)
@@ -880,6 +1018,7 @@ class App:
         os.startfile(data_dir())
 
     def quit(self):
+        self.persist_edited_draft()
         self.quitting = True
         self.context_memory.clear()
         self.page_context.clear()

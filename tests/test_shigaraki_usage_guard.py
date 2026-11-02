@@ -141,6 +141,22 @@ class DiagnosticHistoryTests(unittest.TestCase):
         self.assertEqual(current["latest_failure"]["outcome"], "notAttempted")
         self.assertLess(self.path.stat().st_size, MAX_READ_BYTES)
 
+    def test_first_transfer_metadata_survives_later_successes(self):
+        self.attempt("notAttempted", attempt_in_run=1, seconds_after_preparation=0.4)
+        current = self.attempt("confirmed", attempt_in_run=2, seconds_after_preparation=4.0)
+        self.assertEqual(current["latest_failure"]["attempt_in_run"], 1)
+        self.assertEqual(current["latest_failure"]["seconds_after_preparation"], 0.4)
+        self.assertEqual(current["recent_attempts"][-1]["attempt_in_run"], 2)
+
+    def test_invalid_startup_metadata_is_not_kept_in_history(self):
+        for attempt, elapsed in ((True, False), (0, -1), (1_000_001, float("inf")),
+                                 ("秘密", float("nan"))):
+            with self.subTest(attempt=attempt):
+                current = self.attempt("notAttempted", attempt_in_run=attempt,
+                                       seconds_after_preparation=elapsed)
+                self.assertNotIn("attempt_in_run", current["latest_failure"])
+                self.assertNotIn("seconds_after_preparation", current["latest_failure"])
+
     def test_unverified_dispatch_is_not_fabricated_as_a_failed_paste(self):
         current = self.attempt("sentUnverified", readback="unchanged")
         self.assertIsNone(current["latest_failure"])
