@@ -1,0 +1,29 @@
+name: macOS model-free checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  swift:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Check native build policy
+        run: |
+          python -m unittest discover -s macos/Tests -v
+          zsh -n macos/scripts/build.sh macos/scripts/package-release.sh
+      - name: Check runner and Swift package
+        run: |
+          test "$(uname -m)" = arm64
+          swift --version
+          swift test --package-path macos --jobs 2
+      - name: Run isolated application checks
+        run: |
+          macos/.build/debug/KoeFlow --window-draft-self-test
+          macos/.build/debug/KoeFlow --setup-self-test
+          macos/.build/debug/KoeFlow --hold-release-self-test

@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+build/
+*.app/
+*.dmg
+*.pdf
+.DS_Store
+# Unused historical setup capture; current guides use 05-first-run.png.
+docs/screenshots/05-first-run.jpg

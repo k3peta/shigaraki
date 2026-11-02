@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "source": "Japan Post postal address data (processed prefecture/municipality index)",
+  "sourceURL": "https://www.post.japanpost.jp/service/search/zipcode/download/utf/zip/utf_ken_all.zip",
+  "descriptionURL": "https://www.post.japanpost.jp/service/search/zipcode/download/utf-readme.html",
+  "releaseDate": "2026-09-30",
+  "retrievedAt": "2026-10-06T00:00:02.245566+00:00",
+  "archiveSHA256": "444881769a631d2c36c644fc041e5ce62fe65d204ff498a601641ba1e66b5955",
+  "indexSHA256": "1f5a1bda27163ff6b6d597f9bf96543d1eab4fc2c277176a70f0e67392a18281",
+  "prefectures": 47,
+  "municipalities": 1892,
+  "entries": 1939,
+  "scope": "Prefecture and postal municipality names; no station names or town areas. No automatic replacement."
+}
