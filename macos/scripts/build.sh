@@ -34,6 +34,27 @@ if [[ "${KOEFLOW_SKIP_DOCS:-0}" != 1 ]]; then
   done
   cp "$PROJECT_ROOT/docs/fonts/OFL.txt" "$APP_PATH/Contents/Resources/Licenses/NotoSansJP-OFL.txt"
 fi
+# HFS+ disk images decompose filenames. Seal the same names before signing so
+# a drag/copy from the mounted image does not invalidate Japanese resources.
+/usr/bin/python3 - "$APP_PATH/Contents/Resources" <<'NORMALIZE_RESOURCE_NAMES'
+from pathlib import Path
+import sys, unicodedata, uuid
+root = Path(sys.argv[1])
+changed = 0
+for path in sorted(root.rglob('*'), key=lambda value: len(value.parts), reverse=True):
+    name = unicodedata.normalize('NFD', path.name)
+    if name == path.name:
+        continue
+    target = path.with_name(name)
+    if target.exists() and not path.samefile(target):
+        raise SystemExit('Conflicting Unicode resource filenames.')
+    # A direct normalization-only rename can be a no-op on APFS.
+    temporary = path.with_name('.shigaraki-name-' + uuid.uuid4().hex)
+    path.rename(temporary)
+    temporary.rename(target)
+    changed += 1
+print('Normalized resource filenames:', changed)
+NORMALIZE_RESOURCE_NAMES
 SIGNING_IDENTITY="${KOEFLOW_SIGNING_IDENTITY:-}"
 ADHOC=0
 [[ "$SIGNING_IDENTITY" != - ]] || ADHOC=1

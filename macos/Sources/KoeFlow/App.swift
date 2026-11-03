@@ -20,12 +20,11 @@ final class CaptionPanel: NSPanel {
     private var shortcutSubscription: AnyCancellable?
     private var continuousMenuItem: NSMenuItem?
     private let retryHotkey = Hotkey()
-    private let voiceEditHotkey = Hotkey()
-    private var voiceEditSubscription: AnyCancellable?
     private var lastExternalApp: NSRunningApplication?
     private var mainHoldStopKey: UInt16?
     private var workspaceObserver: NSObjectProtocol?
     private var retrying = false
+    private var quitting = false
     private var statusItem: NSStatusItem?
     private var window: NSWindow?
     private var setupWindow: NSWindow?
@@ -58,7 +57,7 @@ final class CaptionPanel: NSPanel {
         editItem.submenu = editMenu; mainMenu.addItem(editItem)
         let windowItem = NSMenuItem()
         let windowMenu = NSMenu(title: "ウィンドウ")
-        let closeItem = NSMenuItem(title: "設定画面を閉じる", action: #selector(closeWindow), keyEquivalent: "w")
+        let closeItem = NSMenuItem(title: "ウィンドウを閉じる", action: #selector(closeWindow), keyEquivalent: "w")
         closeItem.target = self; windowMenu.addItem(closeItem)
         windowItem.submenu = windowMenu; mainMenu.addItem(windowItem)
         let helpItem = NSMenuItem()
@@ -70,7 +69,6 @@ final class CaptionPanel: NSPanel {
         helpMenu.addItem(withTitle: "文章整形・アプリ別設定", action: #selector(openWritingGuide), keyEquivalent: "")
         helpMenu.addItem(withTitle: "連続入力・プロンプトカード", action: #selector(openContinuousGuide), keyEquivalent: "")
         helpMenu.addItem(withTitle: "地名辞書", action: #selector(openGeographyGuide), keyEquivalent: "")
-        helpMenu.addItem(withTitle: "音声編集", action: #selector(openVoiceEditGuide), keyEquivalent: "")
         for entry in helpMenu.items { entry.target = self }
         helpItem.submenu = helpMenu; mainMenu.addItem(helpItem)
         NSApp.mainMenu = mainMenu
@@ -78,20 +76,18 @@ final class CaptionPanel: NSPanel {
         item.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "信楽")
         statusItem = item
         let menu = NSMenu()
-        menu.addItem(withTitle: "設定・辞書・全文を開く", action: #selector(openWindow), keyEquivalent: "")
+        menu.addItem(withTitle: "メインパネルを開く", action: #selector(openWindow), keyEquivalent: "")
         menu.addItem(withTitle: SetupCopy.guide, action: #selector(openSetup), keyEquivalent: "")
         menu.addItem(withTitle: "操作マニュアル", action: #selector(openManual), keyEquivalent: "")
         menu.addItem(withTitle: "操作早見表", action: #selector(openQuickGuide), keyEquivalent: "")
         menu.addItem(withTitle: "文章整形・アプリ別設定", action: #selector(openWritingGuide), keyEquivalent: "")
         menu.addItem(withTitle: "連続入力・プロンプトカード", action: #selector(openContinuousGuide), keyEquivalent: "")
         menu.addItem(withTitle: "地名辞書", action: #selector(openGeographyGuide), keyEquivalent: "")
-        menu.addItem(withTitle: "音声編集", action: #selector(openVoiceEditGuide), keyEquivalent: "")
         menu.addItem(withTitle: "字幕を開始・停止  ⌃⌥Space", action: #selector(toggle), keyEquivalent: "")
         let continuousItem = NSMenuItem(title: "連続入力を開始・停止  " + model.settings.continuousShortcut.symbol,
             action: #selector(toggleContinuous), keyEquivalent: "")
         menu.addItem(continuousItem); continuousMenuItem = continuousItem
         menu.addItem(withTitle: "最後の入力を貼り付け  ⌃⌥V", action: #selector(pasteLastInput), keyEquivalent: "")
-        menu.addItem(withTitle: "最後の入力を再編集", action: #selector(reeditLastInput), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "字幕を閉じる", action: #selector(closeOverlay), keyEquivalent: "")
         menu.addItem(withTitle: "信楽を終了", action: #selector(quit), keyEquivalent: "q")
@@ -118,15 +114,6 @@ final class CaptionPanel: NSPanel {
         }
         modifierHold.onPress = { [weak self] in self?.modifierPressed($0) }
         modifierHold.onRelease = { [weak self] in self?.modifierReleased($0) }
-        voiceEditHotkey.onPress = { [weak self] in self?.model.start(voiceEdit: true) }
-        voiceEditHotkey.onRelease = { [weak self] in
-            guard let self, self.model.voiceEditing else { return }
-            if self.model.phase == .preparing { self.model.cancel() }
-            else if self.model.phase == .listening { Task { await self.model.stop(reason: "voiceEditRelease") } }
-        }
-        modifierHold.voiceEditShortcut = { [weak self] in self?.model.settings.voiceEditShortcut ?? .none }
-        configureVoiceEditShortcut(model.settings.voiceEditShortcut)
-        voiceEditSubscription = model.settings.$voiceEditShortcut.dropFirst().sink { [weak self] in self?.configureVoiceEditShortcut($0) }
         modifierHold.continuousShortcut = { [weak self] in self?.model.settings.continuousShortcut ?? .none }
         modifierHold.continuousActive = { [weak self] in self?.model.continuous == true && self?.model.isBusy == true }
         modifierHold.mainHoldEnabled = { [weak self] in self?.mainWindowPresented == true && self?.model.voiceEditing == false }
@@ -182,6 +169,7 @@ final class CaptionPanel: NSPanel {
         model.openManual = { [weak self] in self?.openManual() }
         model.openQuickGuide = { [weak self] in self?.openQuickGuide() }
         model.openSetup = { [weak self] in self?.openSetup() }
+        model.quitApplication = { [weak self] in self?.quit() }
         model.setupBlocksInput = { [weak self] in
             guard let self else { return false }
             if self.setupWindow?.isVisible == true || !self.setup.ready {
@@ -332,7 +320,7 @@ final class CaptionPanel: NSPanel {
         model.settings.refreshLoginStatus()
         if window == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 680), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-            window.title = "信楽"; window.isReleasedWhenClosed = false; window.delegate = self
+            window.title = "信楽 — メインパネル"; window.isReleasedWhenClosed = false; window.delegate = self
             window.titleVisibility = .visible; window.titlebarAppearsTransparent = false
             window.isOpaque = true; window.backgroundColor = .windowBackgroundColor
             window.level = .floating
@@ -392,14 +380,6 @@ final class CaptionPanel: NSPanel {
             closeOverlay(); presentWindow(activate: false)
         }
     }
-    private func configureVoiceEditShortcut(_ value: VoiceEditShortcut) {
-        voiceEditHotkey.unregister()
-        guard value != .none, model.demoFile == nil else { return }
-        let modifiers = value == .controlOptionE ? UInt32(controlKey | optionKey) : UInt32(optionKey | shiftKey)
-        if !voiceEditHotkey.register(keyCode: UInt32(kVK_ANSI_E), modifiers: modifiers) {
-            model.status = "音声編集のショートカットを登録できませんでした。設定で別のキーを選んでください。"
-        }
-    }
     private func configureContinuousShortcut(_ value: ContinuousShortcut) {
         continuousHotkey.unregister()
         continuousMenuItem?.title = "連続入力を開始・停止  " + value.symbol
@@ -409,7 +389,7 @@ final class CaptionPanel: NSPanel {
         }
     }
     @objc func pasteLastInput() {
-        guard !retrying, !model.isBusy, !model.pasteText.isEmpty else { return }
+        guard !quitting, !retrying, !model.isBusy, !model.pasteText.isEmpty else { return }
         retrying = true
         Task { @MainActor in
             defer { retrying = false }
@@ -428,10 +408,10 @@ final class CaptionPanel: NSPanel {
                 try? await Task.sleep(for: .milliseconds(150))
                 guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier else { return }
             }
+            guard !quitting else { return }
             await model.pasteLastInput()
         }
     }
-    @objc func reeditLastInput() { model.beginLastInputEdit() }
     @objc func closeWindow() { (NSApp.keyWindow ?? window)?.performClose(nil) }
     @objc func openSetup() {
         guard !model.isBusy else { presentWindow(activate: true); return }
@@ -449,7 +429,7 @@ final class CaptionPanel: NSPanel {
                     if self.model.demoFile == nil { self.modifierHold.restartMonitoring() }
                     self.setupWindow?.close()
                     self.writeDiagnostics()
-                    if let app = self.lastExternalApp, !app.isTerminated { app.activate(options: []) }
+                    self.openWindow()
                 }, openGuide: { [weak self] in self?.openInstallGuide() }))
             panel.center(); setupWindow = panel
         }
@@ -494,7 +474,9 @@ final class CaptionPanel: NSPanel {
     }
     @objc func closeOverlay() { overlay?.orderOut(nil) }
     @objc func quit() {
-        model.persistWindowDraft()
+        guard !quitting else { return }
+        quitting = true
+        model.closeWindowWithoutCommit()
         setup.cancelAssets()
         Task { await model.engine.cancel(); await HaasAssets.shared.shutdown(); NSApp.terminate(nil) }
     }

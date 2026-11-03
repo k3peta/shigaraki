@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import KoeFlowCore
 
 /// Captures the real SwiftUI views with fixed sample text. No microphone,
 /// screen capture, event monitoring, external app reads or model downloads.
@@ -26,9 +27,17 @@ import SwiftUI
             window.contentView = NSHostingView(rootView: OverlayView(model: model, settings: model.settings))
         } else {
             model.prepareManualFixture(recording: kind == "listening")
+            if kind == "profiles" {
+                model.settings.inputContextProfiles = [InputContextProfile(kind: .website, identifier: "example.com", topic: "AIへの作業指示", terms: ["Codex", "Antigravity"])]
+            } else if kind.hasPrefix("profiles-limit") {
+                model.settings.inputContextProfiles = (0..<InputContextProfile.maximumProfiles).map {
+                    InputContextProfile(kind: .application, identifier: "com.example.app\($0)")
+                }
+            }
             window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 680), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-            window.title = "信楽"
-            window.contentView = NSHostingView(rootView: FlowView(model: model, settings: model.settings, initialTab: kind == "settings" ? 2 : kind == "dictionary" ? 1 : 0))
+            window.title = "信楽 — メインパネル"
+            let contextIdentifier = kind == "profiles-limit" ? "com.example.additional" : kind == "profiles-limit-edit" ? "com.example.app0" : ""
+            window.contentView = NSHostingView(rootView: FlowView(model: model, settings: model.settings, initialTab: kind == "settings" ? 2 : kind == "dictionary" ? 1 : kind.hasPrefix("profiles") ? 3 : 0, initialContextIdentifier: contextIdentifier))
         }
         window.isReleasedWhenClosed = false; window.backgroundColor = .windowBackgroundColor
         window.center(); window.orderFrontRegardless() // Deliberately do not activate or take keyboard focus.

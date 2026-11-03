@@ -4,10 +4,12 @@ WindowsとmacOS向けの、無料で使えるローカル日本語音声入力�
 
 | 利用するOS | ダウンロード | 導入・操作 | ソースからのビルド |
 | --- | --- | --- | --- |
-| Windows x64 | [Windows版ベータ](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a7) | [Windows導入ガイド](docs/INSTALL.md) | [Windowsビルド手順](docs/BUILD.md) |
-| macOS 26以降・Apple Silicon | [Mac版0.5.0プレリリース](https://github.com/k3peta/shigaraki/releases/tag/macos-v0.5.0) | [Mac導入ガイド](macos/docs/信楽_導入ガイド.md)・[使い方](macos/README.md) | [Macビルド手順](docs/BUILD_MACOS.md) |
+| Windows x64 | [Windows版0.1.0a8ベータ](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a8) | [Windows導入ガイド](docs/INSTALL.md) | [Windowsビルド手順](docs/BUILD.md) |
+| macOS 26以降・Apple Silicon | [Mac版0.5.1プレリリース](https://github.com/k3peta/shigaraki/releases/tag/macos-v0.5.1) | [Mac導入ガイド](macos/docs/信楽_導入ガイド.md)・[使い方](macos/README.md) | [Macビルド手順](docs/BUILD_MACOS.md) |
 
 Mac版はDMG内の「信楽.app」をApplicationsへコピーし、初回の許可と約352MBのモデル準備をアプリ内で進めます。Appleの公証は未実施です。実マイク・実キー・他アプリへの実転記の確認状況は、[Mac版の案内](macos/README.md#確認状況と制約)をご覧ください。
+
+Windows 0.1.0a8・Mac 0.5.1では、アプリやWebサイトごとに、よく話す内容や優先して認識させたい用語を登録できます。入力先のアプリや取得できたサイトのドメインが完全に一致する場合に、認識の参考に使う任意設定です。登録しなくても普段どおり入力でき、文章の文体を変える整形とは別の機能です。
 
 ## Windows版
 
@@ -15,24 +17,26 @@ Windows向けのベータ版です。Haasを使うこの版を、今後の信楽
 
 音声認識には、[Third IntelligenceのHaas-ja-v1.0](https://huggingface.co/third-intelligence/Haas-ja-v1.0)を使用しています。[SakasegawaによるGGUF変換版](https://huggingface.co/sakasegawa/Haas-ja-v1.0-GGUF)を、[speech.cpp](https://github.com/nyosegawa/speech.cpp)のCPUエンジンで実行します。これらの成果に支えられて、信楽は録音・途中字幕・辞書・他アプリへの転記を一つの操作にまとめています。
 
-![大ウィンドウのプレビュー](docs/images/main.png)
+![メインパネルのプレビュー](docs/images/main.png)
 
 図は同じ画面コードから生成したプレビューです。Windows実機のスクリーンショットではありません。
 
 ## Windows版のダウンロードと使い方
 
-[ベータ版のダウンロード](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a7)から、`Shigaraki-Windows-0.1.0a7-setup.exe`を取得してください。[図入り導入ガイド](docs/INSTALL.md)に、インストール・モデル準備・マイク・操作方法をまとめています。
+[Windows 0.1.0a8のリリース](https://github.com/k3peta/shigaraki/releases/tag/v0.1.0a8)から、`Shigaraki-Windows-0.1.0a8-setup.exe`を取得して更新できます。[図入り導入ガイド](docs/INSTALL.md)に、インストール・モデル準備・マイク・操作方法をまとめています。
+
+初回の準備が終わるとメインパネルを使えます。インストーラーから続けて起動した場合は、起動後のモデル準備が終わると自動で開きます。手動で初回起動した場合は、準備完了後に「音声入力を使い始める」を押して開きます。入力パネルで話すには、メインパネルを閉じ、入力先の欄をクリックしてから左Ctrlを長押しします。
 
 現在の配布exeは未署名です。SmartScreenの警告では「詳細情報」→「実行」で進める場合がありますが、Smart App Controlが有効な環境では起動がブロックされることがあります。ダウンロード前に[Windowsの警告と暫定手順](docs/INSTALL.md#windows-security)をご確認ください。
 
-- 小窓で入力：入力欄を選び、左Ctrlを長押しして話します。離すと確定して貼り付けます。
-- 大ウィンドウを開く：小窓で録音していないときに、左Ctrlを短く2回押します。
-- 連続入力：大ウィンドウでは左Ctrlを短く1回押すと録音を開始し、もう1回押すと停止します。録音ボタンでも開始・停止できます。停止した文章は保持し、この段階では貼り付けません。再開すると、保持した文章に改行を入れて追記します。
-- 大ウィンドウから転記：左Ctrlを短く2回押します。録音中なら停止して最後の認識を待ち、未転記の文章を入力先へ一度だけ貼り付けて閉じます。転記済みの文章は、この操作ではもう一度貼り付けません。
-- 履歴：大ウィンドウの「履歴」タブで、保存した入力を新しい順に読み返してコピーできます。[使い方](docs/HISTORY.md)
-- 認識結果の回収：転記に失敗しても、大ウィンドウの「最後の入力をコピー」から文章を取り出せます。
+- 入力パネルで入力：メインパネルを閉じて入力欄を選び、左Ctrlを長押しして話します。離すと確定して貼り付けます。
+- メインパネルを開く：入力パネルで録音していないときに、左Ctrlを短く2回押します。
+- 連続入力：メインパネルでは左Ctrlを短く1回押すと録音を開始し、もう1回押すと停止します。録音ボタンでも開始・停止できます。停止した文章は保持し、この段階では貼り付けません。再開すると、保持した文章に改行を入れて追記します。
+- メインパネルから転記：左Ctrlを短く2回押します。録音中なら停止して最後の認識を待ち、未転記の文章を入力先へ一度だけ貼り付けて閉じます。転記済みの文章は、この操作ではもう一度貼り付けません。
+- 履歴：メインパネルの「履歴」タブで、保存した入力を新しい順に読み返してコピーできます。[使い方](docs/HISTORY.md)
+- 認識結果の回収：転記に失敗しても、メインパネルの「最後の入力をコピー」から文章を取り出せます。
 
-大ウィンドウが開いている間、小窓は表示しません。以前の方式の信楽もインストールできますが、起動して使うのは一方だけです。キーは設定で変更できます。
+メインパネルが開いている間、入力パネルは表示しません。以前の方式の信楽もインストールできますが、起動して使うのは一方だけです。キーは設定で変更できます。
 
 初期辞書はOpenAI、ChatGPT、Codex、Antigravity、Claude、Geminiの6語です。「アンチグラビティ」をAntigravityにするなど、読みからの表記補正と認識候補に使います。大学名などの個人用語は各自で登録してください。ユーザー登録を優先し、更新前に保存した辞書は保持します。
 

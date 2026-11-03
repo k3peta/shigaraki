@@ -17,8 +17,10 @@ struct FlowView: View {
     @State private var profileBundle = ""
     @State private var profileApps: [(id: String, name: String)] = []
     @State private var editingCardID = "standard.email"
-    init(model: FlowModel, settings: Settings, initialTab: Int = 0) {
+    private var initialContextIdentifier: String
+    init(model: FlowModel, settings: Settings, initialTab: Int = 0, initialContextIdentifier: String = "") {
         self.model = model; self.settings = settings; self._tab = State(initialValue: initialTab)
+        self.initialContextIdentifier = initialContextIdentifier
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -36,8 +38,8 @@ struct FlowView: View {
                     .padding(.horizontal, 10).padding(.vertical, 7).background(flowBlue.opacity(0.1), in: Capsule())
             }
             Picker("表示", selection: $tab) {
-                Text("音声入力").tag(0); Text("設定").tag(2); Text("単語辞書").tag(1); Text("アプリ別").tag(3); Text("カード").tag(4)
-            }.pickerStyle(.segmented)
+                Text("音声入力").tag(0); Text("設定").tag(2); Text("単語辞書").tag(1); Text("アプリ・サイト").tag(3); Text("カード").tag(4)
+            }.pickerStyle(.segmented).labelsHidden()
             if tab == 0 { dictation }
             else if tab == 1 { dictionary }
             else if tab == 2 { ScrollView { preferences }.scrollIndicators(.automatic) }
@@ -49,7 +51,7 @@ struct FlowView: View {
                     .buttonStyle(.bordered).controlSize(.regular)
                     .disabled(model.isBusy || model.lastInput.isEmpty)
                     .help("転記できなかった文章も、認識できたところまでコピーします。")
-                Text("小窓：" + settings.shortcutDescription + "\n大窓：1回で録音／停止、2回で転記")
+                Text("入力パネル：" + settings.shortcutDescription + "\nメインパネル：1回で録音／停止\n2回で閉じて転記")
                     .font(.system(size: 13)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Text("v" + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")).font(.system(size: 13)).foregroundStyle(.tertiary)
@@ -152,7 +154,6 @@ struct FlowView: View {
                     .disabled(model.isBusy || model.text.isEmpty || !model.localPolishAvailable)
                     .help("Apple Intelligenceで用途に合わせて整えます。このボタンの結果は自動転記しません。")
                 Button("原文へ戻す") { model.restoreOriginal() }.disabled(model.isBusy || !model.canRestoreOriginal)
-                Button("最後の入力を再編集") { model.beginLastInputEdit() }.disabled(model.isBusy || model.lastInput.isEmpty)
             }.buttonStyle(.glass).controlSize(.regular)
             HStack {
                 if model.phase == .polishing { Button("整形を中止") { model.toggle() } }
@@ -242,6 +243,20 @@ struct FlowView: View {
     }
     private var preferences: some View {
         VStack(alignment: .leading, spacing: 12) {
+            GroupBox("アプリ") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("ログイン時に起動する", isOn: Binding(get: { settings.launchAtLogin }, set: { settings.setLaunchAtLogin($0) }))
+                        .toggleStyle(.checkbox).disabled(model.isBusy)
+                    HStack {
+                        Text(settings.loginMessage).font(.system(size: 13)).foregroundStyle(.secondary)
+                        Spacer()
+                        if settings.loginStatus == .requiresApproval || settings.loginError != nil {
+                            Button("ログイン項目を開く") { SMAppService.openSystemSettingsLoginItems() }.controlSize(.small)
+                        }
+                    }
+                    Button("信楽を終了", systemImage: "power") { model.quitApplication?() }
+                }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+            }
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
                     Picker("操作に使うキー", selection: $settings.holdModifier) {
@@ -249,28 +264,22 @@ struct FlowView: View {
                         Text("左Option").tag("leftOption")
                         Text("このキーを使わない").tag("none")
                     }
-                    Text("大ウィンドウでは1回で録音／停止、2回で閉じて転記します。小窓では、押している間だけ録音します。録音は1回5分までです。")
+                    Text("メインパネルでは1回で録音／停止、2回で閉じて転記します。入力パネルでは、押している間だけ録音します。録音は1回5分までです。")
                         .font(.system(size: 13)).foregroundStyle(.secondary)
                     Picker("連続入力の開始・停止", selection: $settings.continuousShortcut) {
                         ForEach(ContinuousShortcut.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
-                    Picker("大ウィンドウを呼び出すキー", selection: $settings.windowShortcut) {
+                    Picker("メインパネルを呼び出すキー", selection: $settings.windowShortcut) {
                         ForEach(WindowShortcut.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
-                    Text("閉じた大ウィンドウを開く2回押しのキーを選べます。別のキーを選んだ場合も、大ウィンドウ内ではそのキーの2回押しで確定・転記できます。")
-                        .font(.system(size: 13)).foregroundStyle(.secondary)
-                    Picker("音声編集のキー", selection: $settings.voiceEditShortcut) {
-                        ForEach(VoiceEditShortcut.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }
-                    Text("編集キーで大きいウィンドウに本文を読み込み、指示を話します。編集結果は自動転記しません。選択がない場合は本文全体が対象です。")
+                    Text("閉じたメインパネルを開く2回押しのキーを選べます。別のキーを選んだ場合も、メインパネル内ではそのキーの2回押しで確定・転記できます。")
                         .font(.system(size: 13)).foregroundStyle(.secondary)
                     Text("修飾キーだけの組み合わせは、両方押して離すと切り替わります。押し続ける必要はありません。")
                         .font(.system(size: 13)).foregroundStyle(.secondary)
                     Text("認識する言語：日本語（Haas）")
-                    Toggle("小窓で停止したら入力欄へ転記", isOn: $settings.liveInput)
+                    Toggle("入力パネルで停止したら入力欄へ転記", isOn: $settings.liveInput)
                     Toggle("⌃⌥Spaceを押している間だけ話す", isOn: $settings.holdToTalk)
                     Toggle("「改行して」「段落を変えて」を改行に置き換える", isOn: $settings.commands)
-                    Toggle("ログイン時に信楽を起動", isOn: Binding(get: { settings.launchAtLogin }, set: { settings.setLaunchAtLogin($0) }))
                     Toggle("認識した文字をテキストログに保存", isOn: $settings.recognitionLogEnabled)
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }.disabled(model.isBusy)
@@ -279,13 +288,6 @@ struct FlowView: View {
                     .font(.system(size: 13)).foregroundStyle(.secondary)
                 Button("ログを開く") { model.openRecognitionLog() }.controlSize(.small)
                 Button("保存先") { model.openLogFolder() }.controlSize(.small)
-            }
-            HStack {
-                Text(settings.loginMessage).font(.system(size: 13)).foregroundStyle(.secondary)
-                Spacer()
-                if settings.loginStatus == .requiresApproval || settings.loginError != nil {
-                    Button("ログイン項目を開く") { SMAppService.openSystemSettingsLoginItems() }.controlSize(.small)
-                }
             }
             HStack {
                 Label(model.accessibility ? "直接入力の許可あり" : "直接入力の許可が必要", systemImage: model.accessibility ? "checkmark.circle" : "hand.raised")
@@ -330,6 +332,9 @@ struct FlowView: View {
     }
     private var applicationProfiles: some View {
         VStack(alignment: .leading, spacing: 14) {
+            InputContextProfilesView(settings: settings, applications: profileApps, lastBundleID: model.lastTargetBundle, initialIdentifier: initialContextIdentifier)
+            Divider()
+            Text("文章の整形").font(.system(size: 15, weight: .semibold))
             Text("アプリごとに用途・整形方法・使う情報を指定できます。指定がないアプリには共通設定を使います。")
                 .font(.system(size: 14)).foregroundStyle(.secondary)
             HStack {

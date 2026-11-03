@@ -21,7 +21,7 @@ public enum ContextVocabulary {
     }
     private static func reference(_ context: WritingContext) -> String {
         // The selected text is being replaced; it must not steer the next topic.
-        [context.windowTitle, context.fieldHint, context.before, context.after, context.recentPages].joined(separator: "\n")
+        [context.windowTitle, context.fieldHint, context.before, context.after, context.recentPages, context.supplement ?? ""].joined(separator: "\n")
     }
     private static func relevant(_ rule: WordRule, to text: String) -> Bool {
         ([rule.written] + rule.heardForms).contains { contains(text, $0) }

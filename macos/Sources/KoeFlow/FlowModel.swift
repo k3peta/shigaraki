@@ -69,6 +69,7 @@ import KoeFlowCore
     private var pageContextCapturedAt: TimeInterval = 0
     private var contextSubscriptions = Set<AnyCancellable>()
     private var writingRules: [WordRule] = []
+    private var inputContextSupplement = InputContextSupplement()
     private var inputFormatter = TextFormatter.Prepared(rules: [])
     var reviewWordRules: [WordRule] { WordRule.resolve(settings.rules, bundleID: writingPlan.context.bundleID) }
     private var sourceText = ""
@@ -80,6 +81,7 @@ import KoeFlowCore
     let settings = Settings()
     let engine: SpeechEngine
     private var target = TextTarget()
+    private var pendingRetryTarget: TextTarget?
     private var preparedWindowTarget: TextTarget?
     private var pendingStart: Task<Void, Never>?
     private var timer: Timer?
@@ -95,6 +97,7 @@ import KoeFlowCore
     var openManual: (() -> Void)?
     var openQuickGuide: (() -> Void)?
     var openSetup: (() -> Void)?
+    var quitApplication: (() -> Void)?
     var setupBlocksInput: (() -> Bool)?
     var hideOverlay: (() -> Void)?
     var onStateChange: (() -> Void)?
@@ -182,6 +185,10 @@ import KoeFlowCore
     func closeWindowWithoutCommit() {
         commitRequested = false
         windowDismissed = true
+        // A paste may be awaiting app activation or modifier release already.
+        // Invalidate its captured field so TextTarget's post-await checks stop it.
+        target.detach(); pendingRetryTarget?.detach(); preparedWindowTarget?.detach()
+        preparedWindowTarget = nil; direct = false
         persistWindowDraft()
         if phase == .preparing || phase == .listening {
             cancel(reason: "録音を中止しました。認識した文章は保持しています。", presentRecovery: false)
@@ -253,6 +260,7 @@ import KoeFlowCore
         else { toggle() }
     }
     func start(continuous: Bool = false, voiceEdit: Bool = false, heldKey: UInt16? = nil) {
+        guard !voiceEdit || DevelopmentChecks.isIsolatedFixture else { return }
         guard phase == .idle, !isRetrying else { return }
         guard setupBlocksInput?() != true else { return }
         let previousText = text, previousRaw = rawText, previousPending = draftPending
@@ -301,7 +309,7 @@ import KoeFlowCore
                 editingWorkspace = true
             }
             guard editingWorkspace, let draft = try? VoiceEditDraft(text: text, selection: draftSelection) else {
-                target.detach(); direct = false; status = "編集する本文を大きいウィンドウに用意してください。"; onStateChange?(); openSettings?(); return
+                target.detach(); direct = false; status = "編集する本文をメインパネルに用意してください。"; onStateChange?(); openSettings?(); return
             }
             editDraft = draft; editOriginal = draft.target; editWholeDocument = draft.wholeDocument
         } else { editOriginal = ""; editWholeDocument = false }
@@ -321,6 +329,12 @@ import KoeFlowCore
             }
         } else { recentContext.clear() }
         if !(voiceEdit && ownWindow) { logDestination = settings.recognitionLogEnabled && demoFile == nil ? target.logDestination(context: context) : LogDestination() }
+        let contextExcluded = target.contextExcluded || PageContext.excluded(context.windowTitle)
+        inputContextSupplement = InputContextSupplement.resolve(settings.inputContextProfiles, bundleID: context.bundleID,
+            scope: settings.scope(for: context.bundleID), excluded: contextExcluded) {
+                demoFile == nil ? target.inputSiteHost(bundleID: context.bundleID) : nil
+            }
+        context.supplement = inputContextSupplement.topic.isEmpty ? nil : inputContextSupplement.topic
         writingPlan = demoWritingPlan ?? settings.plan(for: context)
         writingRules = WordRule.resolve(settings.rules, bundleID: writingPlan.context.bundleID)
         inputFormatter = TextFormatter.Prepared(rules: writingRules, commands: settings.commands)
@@ -350,7 +364,7 @@ import KoeFlowCore
                     phase = .idle; status = direct ? "テスト音声を入力しました。" : "テスト音声を認識しました。"
                     onStateChange?(); pendingStart = nil; return
                 }
-                let hints = ContextVocabulary.recognitionHints(rules: writingRules, context: writingPlan.context)
+                let hints = inputContextSupplement.recognitionHints(fallback: ContextVocabulary.recognitionHints(rules: writingRules, context: writingPlan.context))
                 try await engine.startMicrophone(localeID: settings.language, hints: hints)
                 guard !Task.isCancelled else { await engine.cancel(); return }
                 phase = .listening; started = Date(); onStateChange?()
@@ -525,7 +539,7 @@ import KoeFlowCore
     }
     func prepareRecoveryFixture() {
         demoFile = URL(fileURLWithPath: "/dev/null")
-        text = "小窓の復旧表示を確認するための文章です。"
+        text = "入力パネルの復旧表示を確認するための文章です。"
         rawText = text; sourceText = text
         transferOutcome = .unconfirmed; retainLastInput(partial: false)
         phase = .idle; inputFailed = true; direct = false
@@ -660,6 +674,8 @@ import KoeFlowCore
         defer { isRetrying = false }
         let retryStarted = Date()
         let retryTarget = TextTarget()
+        pendingRetryTarget = retryTarget
+        defer { pendingRetryTarget = nil }
         let captured = retryTarget.capture()
         let context = retryTarget.writingContext(scope: settings.scope(for: NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""))
         let destination = settings.recognitionLogEnabled && (editingWorkspace || lastInputLogged) ? retryTarget.logDestination(context: context) : LogDestination()
@@ -820,6 +836,21 @@ import KoeFlowCore
         closed.phase = .finishing; closed.continuous = true; closed.commitRequested = true
         closed.text = "閉じる前の本文"; closed.closeWindowWithoutCommit()
         cases.append(["case": "standardCloseClearsCommitIntent", "passed": !closed.commitRequested && closed.windowDismissed && closed.text == "閉じる前の本文"])
+        let awaitingPaste = fixture()
+        awaitingPaste.phase = .finishing; awaitingPaste.direct = true
+        awaitingPaste.text = "転記を待っている本文"
+        let pasteDetached = await TextTarget.detachmentProbe { captured in
+            awaitingPaste.target = captured; awaitingPaste.preparedWindowTarget = captured
+            awaitingPaste.closeWindowWithoutCommit()
+        }
+        cases.append(["case": "closeInvalidatesAwaitingPaste", "passed": pasteDetached && !awaitingPaste.direct && awaitingPaste.preparedWindowTarget == nil && awaitingPaste.text == "転記を待っている本文"])
+        let awaitingRetry = fixture()
+        awaitingRetry.isRetrying = true; awaitingRetry.text = "再転記を待っている本文"
+        let retryDetached = await TextTarget.detachmentProbe { captured in
+            awaitingRetry.pendingRetryTarget = captured
+            awaitingRetry.closeWindowWithoutCommit()
+        }
+        cases.append(["case": "closeInvalidatesAwaitingRetry", "passed": retryDetached && !awaitingRetry.direct && awaitingRetry.text == "再転記を待っている本文"])
         return ["passed": cases.allSatisfy { $0["passed"] as? Bool == true }, "cases": cases,
             "modelsLoaded": 0, "microphoneUsed": false, "externalTextRead": false, "keysSent": false, "userDataWritten": false]
     }

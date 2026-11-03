@@ -136,6 +136,11 @@ FunctionEnd
 
 Section "Uninstall"
     SetOutPath "$TEMP"
+    ; Remove this installation's exact login command only, even if Python is unavailable.
+    ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "信楽"
+    ${If} $0 == '$\"$INSTDIR\信楽.exe$\"'
+        DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "信楽"
+    ${EndIf}
     ; Resolve ownership while the embedded runtime is still present. If it is
     ; broken or blocked, leave links alone and continue exact-path app removal.
     nsExec::ExecToStack /TIMEOUT=15000 '"$INSTDIR\runtime\pythonw.exe" "$INSTDIR\install.py" --remove-shortcuts "$INSTDIR"'

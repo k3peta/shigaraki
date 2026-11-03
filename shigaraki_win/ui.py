@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QPlainTextEdit, QPushButton, QSpinBox, QTabWidget,
-    QToolButton, QVBoxLayout, QWidget, QDialog, QProgressBar, QScrollArea, QFrame, QApplication,
+    QToolButton, QVBoxLayout, QWidget, QDialog, QProgressBar, QScrollArea, QFrame, QApplication, QGroupBox,
 )
 
 COPY = json.loads(Path(__file__).with_name("copy.json").read_text(encoding="utf-8"))
@@ -99,6 +99,8 @@ class MainWindow(QMainWindow):
     add_word = Signal(str, str)
     closed = Signal()
     open_log = Signal()
+    quit_requested = Signal()
+    edit_context_profiles = Signal()
 
     def __init__(self):
         super().__init__(None, Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
@@ -174,6 +176,20 @@ class MainWindow(QMainWindow):
 
         settings = QWidget()
         sl = QVBoxLayout(settings)
+        app_settings = QGroupBox(COPY["app_settings"])
+        app_layout = QVBoxLayout(app_settings)
+        self.launch_at_login = QCheckBox(COPY["launch_at_login"])
+        app_layout.addWidget(self.launch_at_login)
+        self.startup_status = QLabel()
+        self.startup_status.setWordWrap(True)
+        app_layout.addWidget(self.startup_status)
+        quit_row = QHBoxLayout()
+        quit_row.addStretch()
+        self.quit_button = QPushButton(COPY["quit"])
+        self.quit_button.clicked.connect(self.quit_requested.emit)
+        quit_row.addWidget(self.quit_button)
+        app_layout.addLayout(quit_row)
+        sl.addWidget(app_settings)
         form = QFormLayout()
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
@@ -213,6 +229,9 @@ class MainWindow(QMainWindow):
         context_note = QLabel(COPY["context_note"])
         context_note.setWordWrap(True)
         sl.addWidget(context_note)
+        self.context_profiles_button = QPushButton(COPY["input_profiles"])
+        self.context_profiles_button.clicked.connect(self.edit_context_profiles.emit)
+        sl.addWidget(self.context_profiles_button)
         open_log = QPushButton(COPY["open_log"])
         open_log.clicked.connect(self.open_log.emit)
         sl.addWidget(open_log)
@@ -269,7 +288,7 @@ class MainWindow(QMainWindow):
         self.copy_button.setEnabled((not busy or finishing) and bool(self.editor.toPlainText()))
         self.paste_button.setEnabled(not busy and bool(self.editor.toPlainText()))
         self.raw_button.setEnabled((not busy or finishing) and bool(self.editor.toPlainText()))
-        for widget in [self.modifier, self.microphone, self.prepare, self.log_enabled, self.punctuation_enabled, self.proof_enabled, self.context_enabled]:
+        for widget in [self.modifier, self.microphone, self.prepare, self.log_enabled, self.punctuation_enabled, self.proof_enabled, self.context_enabled, self.context_profiles_button]:
             widget.setEnabled(not busy)
 
     def closeEvent(self, event):
