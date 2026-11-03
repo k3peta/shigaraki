@@ -314,6 +314,14 @@ import KoeFlowCore
         let mainHold = ModifierHold()
         var mainDown = false, busy = false, mainStarts = 0, mainStops = 0, commits = 0, toggles = 0
         var mainMode: WindowInputMode = .idle
+        // Gesture timestamps are synthetic; scheduler delays must not turn a
+        // fixture's short tap into a hold. The timer checks above use real time.
+        var mainTime = 1_000.0
+        mainHold.clock = { mainTime }
+        func advanceMain(_ seconds: Double) {
+            mainTime += seconds
+            mainHold.sampleMainInput()
+        }
         let control = NSEvent.ModifierFlags.control.rawValue | 1
         mainHold.selectedKey = { "leftControl" }; mainHold.continuousShortcut = { .none }
         mainHold.windowShortcut = { .controlDoubleTap }; mainHold.inputActive = { busy }
@@ -332,29 +340,32 @@ import KoeFlowCore
             mainHold?.resetMainGesture(blockUntilRelease: true)
         }
         mainHold.onWindowToggle = { toggles += 1 }
-        func mainTap() async {
+        func mainTap() {
             mainDown = true
-            mainHold.handle(event(59, control, time: ProcessInfo.processInfo.systemUptime), external: false)
-            try? await Task.sleep(for: .milliseconds(50))
+            mainHold.handle(event(59, control, time: mainTime), external: false)
+            advanceMain(0.05)
             mainDown = false
-            mainHold.handle(event(59, 0, time: ProcessInfo.processInfo.systemUptime), external: false)
-            try? await Task.sleep(for: .milliseconds(100))
+            mainHold.handle(event(59, 0, time: mainTime), external: false)
+            advanceMain(0.08) // Confirm the stable release.
+            advanceMain(0.08) // Observe any reset requested by the callback.
+            advanceMain(0.08) // Finish its release guard before another tap.
         }
-        await mainTap(); await mainTap()
+        mainTap(); mainTap()
         let doubleWithoutStart = commits == 1 && mainStarts == 0 && toggles == 0
-        try? await Task.sleep(for: .milliseconds(100))
+        advanceMain(0.1)
         mainHold.resetMainGesture()
-        await mainTap()
-        try? await Task.sleep(for: .milliseconds(350))
+        mainTap()
+        advanceMain(0.35)
         let singleStarts = mainStarts == 1 && mainMode == .recording
-        try? await Task.sleep(for: .milliseconds(150))
-        await mainTap()
+        advanceMain(0.15)
+        advanceMain(0.08) // Clear the start callback's release guard.
+        mainTap()
         let singleStops = mainStops == 1 && mainMode == .finishing
-        await mainTap()
+        mainTap()
         let stopThenCommit = commits == 2 && mainStops == 1
-        try? await Task.sleep(for: .milliseconds(100))
+        advanceMain(0.1)
         mainHold.resetMainGesture()
-        await mainTap(); await mainTap()
+        mainTap(); mainTap()
         let freshBusyCommit = commits == 3 && mainStarts == 1 && mainStops == 1
         rows.append(["key": "mainWindowSingleDouble", "doubleWithoutStart": doubleWithoutStart,
             "singleStarts": singleStarts, "singleStops": singleStops, "stopThenCommit": stopThenCommit,
@@ -362,7 +373,7 @@ import KoeFlowCore
             "passed": doubleWithoutStart && singleStarts && singleStops && stopThenCommit && freshBusyCommit])
         mainMode = .inactive; busy = true
         mainHold.resetMainGesture()
-        await mainTap(); await mainTap()
+        mainTap(); mainTap()
         rows.append(["key": "hiddenBusyWindowReveal", "windowToggles": toggles,
             "passed": toggles == 1 && mainStarts == 1 && mainStops == 1 && commits == 3])
 
@@ -373,13 +384,14 @@ import KoeFlowCore
         separate.windowShortcut = { .optionDoubleTap }; separate.mainWindowMode = { .idle }
         separate.keyDown = { $0 == 58 && optionDown }; separate.mouseDown = { false }
         separate.onMainCommit = { separateCommits += 1 }; separate.onMainSingle = { separateSingles += 1 }
+        var separateTime = 2_000.0
         for _ in 0..<2 {
             optionDown = true
-            separate.handle(event(58, option, time: ProcessInfo.processInfo.systemUptime), external: false)
-            try? await Task.sleep(for: .milliseconds(50))
+            separate.handle(event(58, option, time: separateTime), external: false)
+            separateTime += 0.05
             optionDown = false
-            separate.handle(event(58, 0, time: ProcessInfo.processInfo.systemUptime), external: false)
-            try? await Task.sleep(for: .milliseconds(100))
+            separate.handle(event(58, 0, time: separateTime), external: false)
+            separateTime += 0.1
         }
         rows.append(["key": "separateWindowShortcutCommit", "passed": separateCommits == 1 && separateSingles == 0])
         return ["passed": rows.allSatisfy { $0["passed"] as? Bool == true }, "cases": rows]
