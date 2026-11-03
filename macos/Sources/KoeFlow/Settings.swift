@@ -18,6 +18,9 @@ import ServiceManagement
     @Published var contextScope: ContextScope = .nearby { didSet { save() } }
     @Published var pageContextEnabled = true { didSet { save() } }
     @Published var appProfiles: [AppWritingProfile] = [] { didSet { save() } }
+    @Published var inputContextProfiles: [InputContextProfile] = [] {
+        didSet { if !loadingInputContextProfiles { inputContextProfilesChanged = true; save() } }
+    }
     @Published var promptCards = PromptCard.standards { didSet { save() } }
     @Published var promptCardID = "" { didSet { save() } }
     @Published var recognitionLogEnabled = true { didSet { save() } }
@@ -26,6 +29,7 @@ import ServiceManagement
     var launchAtLogin: Bool { loginStatus == .enabled || loginStatus == .requiresApproval }
     func refreshLoginStatus() { loginStatus = SMAppService.mainApp.status }
     func setLaunchAtLogin(_ enabled: Bool) {
+        guard savesEnabled else { return }
         loginError = nil
         do {
             if enabled { try SMAppService.mainApp.register() }
@@ -44,6 +48,8 @@ import ServiceManagement
     }
     private let defaults = UserDefaults.standard
     private let savesEnabled = !DevelopmentChecks.isIsolatedFixture
+    private var inputContextProfilesChanged = false
+    private var loadingInputContextProfiles = true
     init() {
         // The native UI fixture starts empty and never writes the user's preferences.
         if !savesEnabled { recognitionLogEnabled = false; return }
@@ -63,11 +69,14 @@ import ServiceManagement
         contextScope = ContextScope(rawValue: defaults.string(forKey: "writingContextScope") ?? "") ?? .nearby
         pageContextEnabled = defaults.object(forKey: "pageContextEnabled") as? Bool ?? true
         if let data = defaults.data(forKey: "appWritingProfiles"), let decoded = try? JSONDecoder().decode([AppWritingProfile].self, from: data) { appProfiles = decoded }
+        if let data = defaults.data(forKey: "inputContextProfiles") { inputContextProfiles = InputContextProfile.restored(from: data) }
         if let data = defaults.data(forKey: "promptCards"), let decoded = try? JSONDecoder().decode([PromptCard].self, from: data) {
             promptCards = PromptCard.restoringStandards(in: decoded)
         }
         promptCardID = defaults.string(forKey: "promptCardID") ?? ""
         recognitionLogEnabled = defaults.object(forKey: "recognitionLogEnabled") as? Bool ?? true
+        inputContextProfilesChanged = false
+        loadingInputContextProfiles = false
     }
     private func save() {
         guard savesEnabled else { return }
@@ -83,6 +92,10 @@ import ServiceManagement
         defaults.set(contextScope.rawValue, forKey: "writingContextScope")
         defaults.set(pageContextEnabled, forKey: "pageContextEnabled")
         defaults.set(try? JSONEncoder().encode(appProfiles), forKey: "appWritingProfiles")
+        if inputContextProfilesChanged {
+            defaults.set(try? JSONEncoder().encode(inputContextProfiles.prefix(InputContextProfile.maximumProfiles).compactMap(\.normalized)), forKey: "inputContextProfiles")
+            inputContextProfilesChanged = false
+        }
         defaults.set(try? JSONEncoder().encode(promptCards), forKey: "promptCards")
         defaults.set(promptCardID, forKey: "promptCardID")
         defaults.set(recognitionLogEnabled, forKey: "recognitionLogEnabled")

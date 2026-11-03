@@ -41,16 +41,18 @@ public struct WritingContext: Codable, Equatable, Sendable {
     public var selected: String
     public var after: String
     public var recentPages: String
-    public init(bundleID: String = "", appName: String = "", windowTitle: String = "", fieldHint: String = "", before: String = "", selected: String = "", after: String = "", recentPages: String = "") {
+    public var supplement: String?
+    public init(bundleID: String = "", appName: String = "", windowTitle: String = "", fieldHint: String = "", before: String = "", selected: String = "", after: String = "", recentPages: String = "", supplement: String? = nil) {
         self.bundleID = bundleID; self.appName = appName; self.windowTitle = String(windowTitle.prefix(160)); self.fieldHint = String(fieldHint.prefix(120))
         self.before = String(before.suffix(300)); self.selected = String(selected.prefix(200)); self.after = String(after.prefix(200))
         self.recentPages = String(recentPages.prefix(240))
+        self.supplement = supplement.flatMap { $0.isEmpty ? nil : String($0.prefix(800)) }
     }
     public func limited(to scope: ContextScope) -> WritingContext {
         WritingContext(bundleID: bundleID, appName: appName, windowTitle: scope == .appOnly ? "" : windowTitle,
                        fieldHint: scope == .appOnly ? "" : fieldHint, before: scope == .nearby ? before : "",
                        selected: scope == .nearby ? selected : "", after: scope == .nearby ? after : "",
-                       recentPages: scope == .appOnly ? "" : recentPages)
+                       recentPages: scope == .appOnly ? "" : recentPages, supplement: supplement)
     }
     public static func surrounding(_ text: String, range: NSRange) -> (String, String, String)? {
         let value = text as NSString

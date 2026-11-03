@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes
 import os
 import sys
+import time
 from ctypes import wintypes as W
 from dataclasses import dataclass
 
@@ -20,9 +21,11 @@ class Target:
     app: str
     paste_mode: str = "verified"
     value_source: str = ""
+    site_eligible: bool = False
 
 
 CLIPBOARD_APPS = frozenset({"antigravity.exe", "chrome.exe", "chatgpt.exe"})
+SITE_BROWSERS = frozenset({"chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "vivaldi.exe"})
 
 
 def uia_flag(value, expected):
@@ -88,6 +91,113 @@ class WindowsInput:
         if not hwnd or pid == os.getpid() or self.app_name(pid).casefold() not in BROWSERS:
             return None
         return self.window_title(hwnd, pid)
+
+    def _site_automation_client(self):
+        if hasattr(self, "_site_automation"):
+            return self._site_automation
+        self._site_automation = None
+        try:
+            import comtypes.client
+            client = comtypes.client.CreateObject(
+                "{E22AD333-B25F-460C-83D0-0581107395C9}", interface=self.UIA.IUIAutomation2)
+            client.ConnectionTimeout = 50
+            client.TransactionTimeout = 50
+            if client.ConnectionTimeout == 50 and client.TransactionTimeout == 50:
+                self._site_automation = client
+        except Exception:
+            pass
+        return self._site_automation
+
+    def _site_window_title(self, target):
+        if not may_restore(target.hwnd, target.pid, *self.foreground(), os.getpid()):
+            return None
+        pid = W.DWORD()
+        if not self.user.GetWindowThreadProcessId(target.hwnd, ctypes.byref(pid)) or pid.value != target.pid:
+            return None
+        title = ctypes.create_unicode_buffer(161)
+        if self.user.GetWindowTextW(target.hwnd, title, len(title)) <= 0:
+            return None
+        return title.value if may_restore(target.hwnd, target.pid, *self.foreground(), os.getpid()) else None
+
+    def site_host(self, target):
+        """Optional metadata only: caller probes once when an enabled site option exists."""
+        from .page_context import excluded
+        if (not isinstance(target, Target) or target.site_eligible is not True or
+                target.app.casefold() not in SITE_BROWSERS or not target.runtime_id):
+            return ""
+        try:
+            title = self._site_window_title(target)
+            if title is None or excluded(title) or self.app_name(target.pid).casefold() != target.app.casefold():
+                return ""
+            client = self._site_automation_client()
+            if client is None:
+                return ""
+            deadline = time.monotonic() + .05
+            def request(function, *args):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError
+                value = function(*args)
+                if time.monotonic() >= deadline:
+                    raise TimeoutError
+                return value
+            def property_value(element, name):
+                return request(getattr, element, name)
+            if self.foreground() == (target.hwnd, target.pid):
+                field = request(client.GetFocusedElement)
+                if (tuple(request(field.GetRuntimeId)) != target.runtime_id or
+                        property_value(field, "CurrentProcessId") != target.pid or
+                        not uia_flag(property_value(field, "CurrentIsPassword"), False) or
+                        not uia_flag(property_value(field, "CurrentHasKeyboardFocus"), True)):
+                    return ""
+            walker = property_value(client, "RawViewWalker")
+            # No property calls on the old client's captured proxy. The short-timeout
+            # walker creates parent elements; never enumerate children or siblings.
+            node = target.element
+            for _ in range(12):
+                if time.monotonic() >= deadline:
+                    return ""
+                node = request(walker.GetParentElement, node)
+                if (not node or property_value(node, "CurrentProcessId") != target.pid or
+                        not uia_flag(property_value(node, "CurrentIsPassword"), False)):
+                    return ""
+                if property_value(node, "CurrentControlType") != self.UIA.UIA_DocumentControlTypeId:
+                    continue
+                # A writable compose box can also be Document. Do not inspect its
+                # value, or climb past an unknown inner document to another site.
+                if property_value(node, "CurrentAutomationId") != "RootWebArea":
+                    return ""
+                host = ""
+                try:
+                    unknown = request(node.GetCurrentPattern, self.UIA.UIA_LegacyIAccessiblePatternId)
+                    pattern = request(unknown.QueryInterface, self.UIA.IUIAutomationLegacyIAccessiblePattern)
+                    state = property_value(pattern, "CurrentState")
+                    if type(state) is int and state & 0x20000000:
+                        return ""
+                    if property_value(pattern, "CurrentRole") == 15 and type(state) is int and state & 0x40:
+                        host = self._http_site_host(property_value(pattern, "CurrentValue"))
+                except Exception:
+                    pass
+                if not host and time.monotonic() < deadline:
+                    try:
+                        unknown = request(node.GetCurrentPattern, self.UIA.UIA_ValuePatternId)
+                        pattern = request(unknown.QueryInterface, self.UIA.IUIAutomationValuePattern)
+                        if uia_flag(property_value(pattern, "CurrentIsReadOnly"), True):
+                            host = self._http_site_host(property_value(pattern, "CurrentValue"))
+                    except Exception:
+                        pass
+                return host if (time.monotonic() < deadline and self._site_window_title(target) == title) else ""
+        except Exception:
+            # Provider errors can contain a URL or text. Retain neither the error
+            # message nor intermediate values in diagnostics or settings.
+            pass
+        return ""
+
+    @staticmethod
+    def _http_site_host(value):
+        from .context_profiles import normalize_host
+        if not isinstance(value, str) or len(value) > 4096 or not value.lower().startswith(("https://", "http://")):
+            return ""
+        return normalize_host(value)
 
     def modifiers_up(self):
         return not any(self.key_down(k) for k in [0xA2, 0xA3, 0xA4, 0xA5, 0xA0, 0xA1, 0x5B, 0x5C])
@@ -201,7 +311,8 @@ class WindowsInput:
                 return None
             self.last_target_reason = "captured_clipboard_" + source
             return Target(hwnd, pid, field, runtime, original, None, "", "", app,
-                          paste_mode="clipboard", value_source=source)
+                          paste_mode="clipboard", value_source=source,
+                          site_eligible=app.casefold() in SITE_BROWSERS)
         except Exception as error:
             # Never put COM error messages or editor contents into diagnostics.
             self.last_capture_error = type(error).__name__
@@ -220,7 +331,8 @@ class WindowsInput:
         suffix = document.Clone()
         suffix.MoveEndpointByRange(0, selected, 1)
         target = Target(hwnd, pid, field, tuple(field.GetRuntimeId()), original, selected,
-                        prefix.GetText(-1), suffix.GetText(-1), app)
+                        prefix.GetText(-1), suffix.GetText(-1), app,
+                        site_eligible=app.casefold() in SITE_BROWSERS)
         self.last_target_reason = "captured"
         return target
 

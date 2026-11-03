@@ -24,6 +24,8 @@ from .runtime_status import ProofreaderBlocked
 from .proofreading import SentenceProofreader
 from .punctuation import PunctuationRuntime
 from .ui import COPY, CaptionPanel, MainWindow, SetupWindow, wave_icon
+from .startup import LoginStartup
+from .context_profiles import load_profiles, resolve_profiles, recognition_vocabulary, prioritize_hints
 
 
 class Signals(QObject):
@@ -89,6 +91,7 @@ class App:
         self.continuous = False
         self.cancelled = False
         self.quitting = False
+        self.login_startup = LoginStartup()
         self.hold_stops = False
         self.commit_requested = False
         self.record_prefix = ""
@@ -129,6 +132,11 @@ class App:
         self.main.add_word.connect(self.add_word)
         self.main.closed.connect(self.closed)
         self.main.open_log.connect(self.open_log)
+        self.main.quit_requested.connect(self.quit)
+        self.main.edit_context_profiles.connect(self.open_context_profiles)
+        self.main.launch_at_login.toggled.connect(self.set_launch_at_login)
+        self.main.tabs.currentChanged.connect(lambda *_: self.refresh_login_startup())
+        self.refresh_login_startup()
         self.main.editor.textChanged.connect(self.editor_changed)
         self.main.modifier.currentIndexChanged.connect(self.save_settings)
         self.main.log_enabled.toggled.connect(self.save_settings)
@@ -182,6 +190,64 @@ class App:
         temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(temporary, path)
 
+    def refresh_login_startup(self, error=None):
+        try:
+            enabled = self.login_startup.registered()
+            available = enabled or self.login_startup.launcher.is_file()
+            message = COPY["login_startup_note"] if available else COPY["login_startup_unavailable"]
+        except ImportError:
+            enabled, available, message = False, False, COPY["login_startup_unavailable"]
+        except (OSError, ValueError):
+            enabled, available, message = False, False, COPY["login_startup_read_failed"]
+        checkbox = self.main.launch_at_login
+        previous = checkbox.blockSignals(True)
+        checkbox.setChecked(enabled)
+        checkbox.blockSignals(previous)
+        checkbox.setEnabled(available and not self.quitting)
+        self.main.startup_status.setText(error or message)
+
+    def set_launch_at_login(self, enabled):
+        try:
+            self.login_startup.set_enabled(enabled)
+        except (ImportError, OSError, ValueError):
+            self.refresh_login_startup(COPY["login_startup_change_failed"])
+        else:
+            self.refresh_login_startup()
+
+    def open_context_profiles(self):
+        if self.phase != "idle":
+            return
+        from .context_profile_ui import ContextProfilesDialog
+        target = self.last_target
+        app = getattr(target, "app", "")
+        app = app if isinstance(app, str) else ""
+        def lookup(kind):
+            host = self.native.site_host(target) if kind == "website" and target is not None and self.main.context_enabled.isChecked() else ""
+            return app, host if isinstance(host, str) else ""
+        dialog = ContextProfilesDialog(self.settings.get("input_context_profiles", []), self.save_context_profiles,
+                                       app=app, lookup=lookup, parent=self.main)
+        dialog.exec()
+
+    def save_context_profiles(self, profiles):
+        updated = {**self.settings, "input_context_profiles": profiles}
+        try:
+            self.write_json(self.settings_path, updated)
+        except OSError:
+            return False
+        self.settings = updated
+        return True
+
+    def input_profile_context(self, target, title=""):
+        if (not self.main.context_enabled.isChecked() or target is None or excluded(title) or
+                self.native.last_capture_checks.get("password", False) is True):
+            return "", ()
+        profiles = load_profiles(self.settings.get("input_context_profiles", []))
+        if not profiles:
+            return "", ()
+        host = self.native.site_host(target) if any(p["enabled"] and p["kind"] == "website" for p in profiles) else ""
+        host = host if isinstance(host, str) else ""
+        return resolve_profiles(profiles, getattr(target, "app", ""), host)
+
     def save_settings(self, *_):
         was_enabled = bool(self.settings.get("proofreading", True))
         self.settings.update(modifier=self.main.modifier.currentIndex(),
@@ -225,6 +291,7 @@ class App:
         return effective_words(self.settings.get("words", []))
 
     def show_main(self):
+        self.refresh_login_startup()
         if self.setup.isVisible() and not self.setup.ready or not self.settings.get("setup_complete", False):
             self.setup.show()
             self.setup.raise_()
@@ -351,7 +418,8 @@ class App:
             # Modifier states plus keyboard/mouse interactions cancel an unarmed hold.
             isolated = not down or not any(self.native.key_down(k) for k in SHORTCUT_KEYS
                                           if k not in {key, 0x10, 0x11, 0x12})
-            setup_pending = self.setup.isVisible() and not self.setup.ready
+            # Modal settings editors own the keyboard; never record behind them.
+            setup_pending = (self.setup.isVisible() and not self.setup.ready) or self.qt.activeModalWidget() is not None
             was_holding = gesture.holding
             allow = (not main_visible and not setup_pending and selected and
                      (self.phase == "idle" or self.phase == "recording" and self.continuous))
@@ -517,8 +585,8 @@ class App:
         self.raw_text = self.raw_prefix
         self.correction_metrics = {}
         rules = self.word_rules()
-        protected = tuple(dict.fromkeys(written for _, written in rules))
         reference = ""
+        title = ""
         self.context_source, self.context_chars = "none", 0
         if self.main.context_enabled.isChecked():
             reference = self.context_memory.context_for(reference_target)
@@ -542,12 +610,18 @@ class App:
         else:
             self.context_memory.clear()
             self.page_context.clear()
-        terms = recognition_terms(rules, self.settings.get("words", []), context=reference)
+        supplement, preferred = self.input_profile_context(reference_target, title if isinstance(title, str) else "")
+        if supplement:
+            reference = (reference + "\n" + supplement).strip()
+            self.context_source, self.context_chars = "input_profile", len(reference)
+        asr_rules = recognition_vocabulary(rules, preferred)
+        protected = tuple(dict.fromkeys(written for _, written in asr_rules))
+        terms = prioritize_hints(recognition_terms(asr_rules, self.settings.get("words", []), context=reference), preferred)
         if self.main.proof_enabled.isChecked() and self.proof_engine.ready:
             self.proofreader = SentenceProofreader(self.proof_engine,
                 lambda: self.signals.revised.emit(generation),
-                protected=protected, context=reference, vocabulary=rules)
-        self.engine.set_vocabulary(rules)
+                protected=protected, context=reference, vocabulary=asr_rules)
+        self.engine.set_vocabulary(asr_rules)
         self.session = CaptionSession(self.engine, self.recorder,
             lambda text: self.signals.caption.emit(generation, text),
             on_utterance=lambda text: self.signals.utterance.emit(generation, text), phrases=terms)
@@ -1018,6 +1092,8 @@ class App:
         os.startfile(data_dir())
 
     def quit(self):
+        if self.quitting:
+            return
         self.persist_edited_draft()
         self.quitting = True
         self.context_memory.clear()

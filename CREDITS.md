@@ -45,7 +45,7 @@ PDFマニュアルの生成にはNoto Sans JPを使用し、[SIL OFL原文](maco
 
 ## 信楽が追加する部分と謝辞
 
-信楽は、録音操作、大小ウィンドウ、途中字幕の表示制御、Rust側の音声区間管理、辞書と文脈の接続、入力先の検査・転記・復旧、導入手順を追加しています。Windows版は、従来の[声吉Windows版](https://github.com/k3peta/koekichi-win)から派生しており、MITの元の著作権表示を保持しています。
+信楽は、録音操作、入力パネルとメインパネル、途中字幕の表示制御、Rust側の音声区間管理、辞書と文脈の接続、入力先の検査・転記・復旧、導入手順を追加しています。Windows版は、従来の[声吉Windows版](https://github.com/k3peta/koekichi-win)から派生しており、MITの元の著作権表示を保持しています。
 
 [iiinno / OpenHinoVoice](https://github.com/iiinno/OpenHinoVoice)は、Haas・speech.cppを使う音声入力アプリとして、また出典・公開方法の参考として挙げています。今回の公開用ソースへOpenHinoVoiceのソースファイルは取り込んでいません。
 

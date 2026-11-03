@@ -83,6 +83,47 @@ import CryptoKit
         return destination
     }
 
+    /// A website option applies only to the captured field and its own current window.
+    /// Unknown/changed targets stay unmatched; never infer a site from a title.
+    func inputSiteHost(bundleID: String) -> String? {
+        let browsers: Set<String> = ["com.apple.Safari", "com.google.Chrome", "com.google.Chrome.canary",
+            "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "org.mozilla.firefox"]
+        guard !contextExcluded, browsers.contains(bundleID), AXIsProcessTrusted(), let element,
+              let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated,
+              app.bundleIdentifier == bundleID, string(element, kAXSubroleAttribute) != kAXSecureTextFieldSubrole,
+              isFocused(element) else { return nil }
+        let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        guard front == pid || front == ProcessInfo.processInfo.processIdentifier else { return nil }
+        func reference(_ object: AXUIElement, _ attribute: String) -> AXUIElement? {
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(object, attribute as CFString, &value) == .success,
+                  let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+            return value as! AXUIElement
+        }
+        guard let window = reference(element, kAXWindowAttribute) else { return nil }
+        let application = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(application, 0.05)
+        guard let focusedWindow = reference(application, kAXFocusedWindowAttribute), CFEqual(window, focusedWindow) else { return nil }
+        func host(_ object: AXUIElement, _ attribute: String) -> String? {
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(object, attribute as CFString, &value) == .success else { return nil }
+            let url = (value as? URL)?.absoluteString ?? (value as? String)
+            return url.flatMap { LogDestination.host(from: $0) }
+        }
+        var node = element
+        let deadline = Date().addingTimeInterval(0.15)
+        for _ in 0..<8 {
+            guard Date() < deadline else { return nil }
+            if string(node, kAXRoleAttribute) == "AXWebArea", let site = host(node, "AXURL") { return site }
+            guard !CFEqual(node, window), let parent = reference(node, kAXParentAttribute) else { break }
+            AXUIElementSetMessagingTimeout(parent, 0.025)
+            node = parent
+        }
+        guard Date() < deadline else { return nil }
+        AXUIElementSetMessagingTimeout(window, 0.025)
+        return host(window, kAXDocumentAttribute)
+    }
+
     /// Read only the focused field/window, once per utterance. No AX tree traversal.
     func writingContext(scope: ContextScope, application: NSRunningApplication? = nil) -> WritingContext {
         guard let app = application ?? NSWorkspace.shared.frontmostApplication, !app.isTerminated,
@@ -294,6 +335,16 @@ import CryptoKit
         return false
     }
     func detach() { element = nil }
+    /// An owned AX reference only: no attributes are read and no input is sent.
+    static func detachmentProbe(_ invalidate: (TextTarget) -> Void) async -> Bool {
+        guard DevelopmentChecks.isIsolatedFixture else { return false }
+        let target = TextTarget()
+        target.element = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+        let attachedBefore = target.element != nil
+        invalidate(target)
+        await Task.yield()
+        return attachedBefore && target.element == nil
+    }
     private func suspend() -> Bool {
         reason = "入力欄への反映を確認できないため、直接入力を停止しました。字幕からコピーできます。"
         element = nil; return false
